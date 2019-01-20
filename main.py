@@ -1,7 +1,10 @@
 """
 Usage Instructions:
+
+
+!!!!!!!!!!!!!!!!!!  FLAGS.stop_grad = TRUE !!!!!!!!!!!!!!!!!!!!  
     10-shot sinusoid:
-        python main.py --datasource=sinusoid --logdir=logs/sine/ --metatrain_iterations=70000 --norm=None --update_batch_size=10
+        python main.py --datasource=sinusoid --logdir=logs/sine/ --metatrain_iterations=70000 --norm=None --update_batch_size=10    
 
     10-shot sinusoid baselines:
         python main.py --datasource=sinusoid --logdir=logs/sine/ --pretrain_iterations=70000 --metatrain_iterations=0 --norm=None --update_batch_size=10 --baseline=oracle
@@ -103,15 +106,38 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
             feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb}
 
         if itr < FLAGS.pretrain_iterations:
-            input_tensors = [model.pretrain_op]
+            input_tensors = [model.pretrain_op]  
         else:
+##### metatrain_op
+'''
+            init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
+            with tf.Session() as sess:
+                sess.run(init_op)
+                for step in range(FLAGS.num_updates):
+                    _ = sess.run(train_op_a)
+                    _ = sess.run(train_op_b)
+ '''           
             input_tensors = [model.metatrain_op]
 
         if (itr % SUMMARY_INTERVAL == 0 or itr % PRINT_INTERVAL == 0):
             input_tensors.extend([model.summ_op, model.total_loss1, model.total_losses2[FLAGS.num_updates-1]])
             if model.classification:
                 input_tensors.extend([model.total_accuracy1, model.total_accuracies2[FLAGS.num_updates-1]])
-
+#  ! execute op
+        init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
+        sess.run(init_op)
+        _ = sess.run([model.pretrain_op], feed_dict)  #######?????
+        '''
+        init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
+       
+        sess.run(init_op)
+        for step in range(FLAGS.num_updates):
+            _ = sess.run(train_op_a, feed_dict)
+        for step in range(FLAGS.num_updates):
+            _ = sess.run(train_op_b, feed_dict)
+        result = 
+        '''
+ 
         result = sess.run(input_tensors, feed_dict)
 
         if itr % SUMMARY_INTERVAL == 0:
@@ -152,6 +178,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
                 else:
                     input_tensors = [model.total_loss1, model.total_losses2[FLAGS.num_updates-1]]
 
+            _ = sess.run([model.pretrain_op], feed_dict)  #######?????
             result = sess.run(input_tensors, feed_dict)
             print('Validation results: ' + str(result[0]) + ', ' + str(result[1]))
 
@@ -188,8 +215,10 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
             feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb, model.meta_lr: 0.0}
 
         if model.classification:
+            _ = sess.run([model.pretrain_op], feed_dict)  #######?????
             result = sess.run([model.metaval_total_accuracy1] + model.metaval_total_accuracies2, feed_dict)
         else:  # this is for sinusoid
+            _ = sess.run([model.pretrain_op], feed_dict)  #######?????
             result = sess.run([model.total_loss1] +  model.total_losses2, feed_dict)
         metaval_accuracies.append(result)
 
