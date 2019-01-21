@@ -72,9 +72,7 @@ class MAML:
         else:
             raise ValueError('Unrecognized data source.')
 
-	init = tf.global_variables_initializer()
-        self.sess = tf.Session()
-        self.sess.run(init)
+
 
 
     def construct_conv_weights(self):
@@ -102,17 +100,14 @@ class MAML:
         for i in range(len(self.dim_hidden)):
             model.add(tfp.layers.DenseFlipout(self.dim_hidden[i] ,activation=tf.nn.relu))
         model.add(tfp.layers.DenseFlipout(self.dim_output))
-        init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
-            #    init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
-    #    sess.run(init_op)
-        with tf.Session() as sess:   
-            sess.run(init_op)
-        print('run op fc') 
+        
+     
         return model
 
 
     def construct_model(self, input_tensors=None, prefix='metatrain_'):
         # a: training data for inner gradient, b: test data for meta gradient
+        '''
         if input_tensors is None:
             print('fuck its none')
             self.inputa = tf.placeholder(tf.float32)
@@ -125,6 +120,13 @@ class MAML:
             self.inputb = input_tensors['inputb']
             self.labela = input_tensors['labela']
             self.labelb = input_tensors['labelb']
+        '''
+        self.sigma = 0.5    # change to flag later
+        self.inputa = input_tensors['inputa']
+        self.inputb = input_tensors['inputb']
+        self.labela = input_tensors['labela']
+        self.labelb = input_tensors['labelb']
+
 	    print(self.labela)
         with tf.variable_scope('model', reuse=None) as training_scope:
             if 'weights' in dir(self):   
@@ -161,13 +163,17 @@ class MAML:
                 logits = weights(tf.cast(inputa, tf.float32))
                 #logits = weights(inputa_run)
                 #logits = weights(inputa.astype('float32'))
-		labels_distribution = tfd.Categorical(logits=logits)
+		        #labels_distribution = tfd.Categorical(logits=logits)
+                if self.classification:
+                    labels_distribution = tfd.Categorical(logits=logits)
+                else:
+                    labels_distribution = tfd.Normal(loc=logits ,scale= self.sigma) #???
                 #print(labels_distribution)
                 #print(labela)
                 neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(labela))
                 kl = sum(weights.losses) / tf.cast(tf.size(inputa), tf.float32)  #???
                 #kl = sum(weights.losses) / tf.size(inputa)
-		elbo_loss_a = neg_log_likelihood + kl
+		        elbo_loss_a = neg_log_likelihood + kl
                 grads_a = tf.gradients(elbo_loss_a, weights.trainable_weights) 
                 print(grads_a)
 		'''
@@ -181,18 +187,22 @@ class MAML:
 	#	print(weights.get_weights())
        #         weights_a.set_weights(true_weights_a)
  #               print(weights_a.trainable_variables)
-		for i in range(len(true_weights_a)):
-		    tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
+        		for i in range(len(true_weights_a)):
+        		    tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
                 print('set weight successfully')
  #               optimizer = tf.train.AdamOptimizer(learning_rate=self.update_lr)
  #               train_op_a = optimizer.minimize(task_lossa)
                 logits = weights_a(tf.cast(inputb, tf.float32))
-                labels_distribution = tfd.Categorical(logits=logits)
-                neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(labelb))
+                if self.classification:
+                    labels_distribution = tfd.Categorical(logits=logits)
+                else:
+                    labels_distribution = tfd.Normal(loc=logits ,scale= self.sigma) #???
+
+                neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(labelb))               
                 kl = sum(weights_a.losses) / tf.cast(tf.size(inputb), tf.float32)  #???
                 elbo_loss_b = neg_log_likelihood + kl
                 grads_b = tf.gradients(elbo_loss_b, weights_a.trainable_weights) 
-             
+                 
                 true_weights_b = [(weights_a.trainable_weights[i]  - self.update_lr*grads_b[i]) for i in range(len(grads_b))]
                 #weights_b.set_weights(true_weights_b)
                 for i in range(len(true_weights_b)):
