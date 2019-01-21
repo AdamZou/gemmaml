@@ -127,7 +127,7 @@ class MAML:
         self.labela = input_tensors['labela']
         self.labelb = input_tensors['labelb']
 
-	    print(self.labela)
+	 #   print(self.labela)
         with tf.variable_scope('model', reuse=None) as training_scope:
             if 'weights' in dir(self):   
                 training_scope.reuse_variables()
@@ -170,10 +170,10 @@ class MAML:
                     labels_distribution = tfd.Normal(loc=logits ,scale= self.sigma) #???
                 #print(labels_distribution)
                 #print(labela)
-                neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(labela))
+                neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(labela, tf.float32)))
                 kl = sum(weights.losses) / tf.cast(tf.size(inputa), tf.float32)  #???
                 #kl = sum(weights.losses) / tf.size(inputa)
-		        elbo_loss_a = neg_log_likelihood + kl
+	        elbo_loss_a = neg_log_likelihood + kl
                 grads_a = tf.gradients(elbo_loss_a, weights.trainable_weights) 
                 print(grads_a)
 		'''
@@ -187,8 +187,8 @@ class MAML:
 	#	print(weights.get_weights())
        #         weights_a.set_weights(true_weights_a)
  #               print(weights_a.trainable_variables)
-        		for i in range(len(true_weights_a)):
-        		    tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
+        	for i in range(len(true_weights_a)):
+        	    tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
                 print('set weight successfully')
  #               optimizer = tf.train.AdamOptimizer(learning_rate=self.update_lr)
  #               train_op_a = optimizer.minimize(task_lossa)
@@ -198,7 +198,7 @@ class MAML:
                 else:
                     labels_distribution = tfd.Normal(loc=logits ,scale= self.sigma) #???
 
-                neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(labelb))               
+                neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(labelb, tf.float32)))               
                 kl = sum(weights_a.losses) / tf.cast(tf.size(inputb), tf.float32)  #???
                 elbo_loss_b = neg_log_likelihood + kl
                 grads_b = tf.gradients(elbo_loss_b, weights_a.trainable_weights) 
