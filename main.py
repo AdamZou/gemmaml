@@ -90,42 +90,20 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
 
     for itr in range(resume_itr, FLAGS.pretrain_iterations + FLAGS.metatrain_iterations):
         feed_dict = {}
-        if 'generate' in dir(data_generator):
-            batch_x, batch_y, amp, phase = data_generator.generate()
-
-            if FLAGS.baseline == 'oracle':
-                batch_x = np.concatenate([batch_x, np.zeros([batch_x.shape[0], batch_x.shape[1], 2])], 2)
-                for i in range(FLAGS.meta_batch_size):
-                    batch_x[i, :, 1] = amp[i]
-                    batch_x[i, :, 2] = phase[i]
-
-            inputa = batch_x[:, :num_classes*FLAGS.update_batch_size, :]
-            labela = batch_y[:, :num_classes*FLAGS.update_batch_size, :]
-            inputb = batch_x[:, num_classes*FLAGS.update_batch_size:, :] # b used for testing
-            labelb = batch_y[:, num_classes*FLAGS.update_batch_size:, :]
-            feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb}
-
-        if itr < FLAGS.pretrain_iterations:
-            input_tensors = [model.pretrain_op]  
+        if itr < FLAGS.pretrain_iterations:    
+	    input_tensors = [model.pretrain_op]  
         else:
 ##### metatrain_op
-'''
-            init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
-            with tf.Session() as sess:
-                sess.run(init_op)
-                for step in range(FLAGS.num_updates):
-                    _ = sess.run(train_op_a)
-                    _ = sess.run(train_op_b)
- '''           
             input_tensors = [model.metatrain_op]
-
+        '''  !!!
         if (itr % SUMMARY_INTERVAL == 0 or itr % PRINT_INTERVAL == 0):
             input_tensors.extend([model.summ_op, model.total_loss1, model.total_losses2[FLAGS.num_updates-1]])
             if model.classification:
                 input_tensors.extend([model.total_accuracy1, model.total_accuracies2[FLAGS.num_updates-1]])
+        '''
 #  ! execute op
-        init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
-        sess.run(init_op)
+    #    init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
+    #    sess.run(init_op)
         _ = sess.run([model.pretrain_op], feed_dict)  #######?????
         '''
         init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
@@ -308,9 +286,49 @@ def main():
         labelb = tf.slice(label_tensor, [0,num_classes*FLAGS.update_batch_size, 0], [-1,-1,-1])
         metaval_input_tensors = {'inputa': inputa, 'inputb': inputb, 'labela': labela, 'labelb': labelb}
     else:
-        tf_data_load = False
-        input_tensors = None
+        #tf_data_load = False
+        tf_data_load = True
+        num_classes = data_generator.num_classes
+        if FLAGS.train:
+            random.seed(5)
+            if 'generate' in dir(data_generator):
+                batch_x, batch_y, amp, phase = data_generator.generate()
 
+                if FLAGS.baseline == 'oracle':
+                    batch_x = np.concatenate([batch_x, np.zeros([batch_x.shape[0], batch_x.shape[1], 2])], 2)
+                    for i in range(FLAGS.meta_batch_size):
+                        batch_x[i, :, 1] = amp[i]
+                        batch_x[i, :, 2] = phase[i]
+
+                inputa = batch_x[:, :num_classes*FLAGS.update_batch_size, :]
+                labela = batch_y[:, :num_classes*FLAGS.update_batch_size, :]
+                inputb = batch_x[:, num_classes*FLAGS.update_batch_size:, :] # b used for testing
+                labelb = batch_y[:, num_classes*FLAGS.update_batch_size:, :]
+                input_tensors = {'inputa': inputa, 'inputb': inputb, 'labela': labela, 'labelb': labelb}
+
+        random.seed(6)
+        
+        if 'generate' in dir(data_generator):
+            batch_x, batch_y, amp, phase = data_generator.generate()
+
+            if FLAGS.baseline == 'oracle':
+                batch_x = np.concatenate([batch_x, np.zeros([batch_x.shape[0], batch_x.shape[1], 2])], 2)
+                for i in range(FLAGS.meta_batch_size):
+                    batch_x[i, :, 1] = amp[i]
+                    batch_x[i, :, 2] = phase[i]
+
+            inputa = batch_x[:, :num_classes*FLAGS.update_batch_size, :]
+            labela = batch_y[:, :num_classes*FLAGS.update_batch_size, :]
+            inputb = batch_x[:, num_classes*FLAGS.update_batch_size:, :] # b used for testing
+            labelb = batch_y[:, num_classes*FLAGS.update_batch_size:, :]
+            metaval_input_tensors = {'inputa': inputa, 'inputb': inputb, 'labela': labela, 'labelb': labelb}
+
+
+
+
+        #input_tensors = None
+    #sess = tf.InteractiveSession()
+    #tf.global_variables_initializer().run()
     model = MAML(dim_input, dim_output, test_num_updates=test_num_updates)
     if FLAGS.train or not tf_data_load:
         model.construct_model(input_tensors=input_tensors, prefix='metatrain_')
@@ -373,3 +391,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

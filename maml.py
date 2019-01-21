@@ -25,9 +25,15 @@ from matplotlib.backends import backend_agg
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
-
-
-
+tfd = tfp.distributions
+#from tensorflow_probability.python import distributions as tfd
+'''
+tfe = tf.contrib.eager
+try:
+    tfe.enable_eager_execution()
+except ValueError:
+    pass
+'''
 FLAGS = flags.FLAGS
 
 class MAML:
@@ -42,22 +48,21 @@ class MAML:
         if FLAGS.datasource == 'sinusoid':
             self.dim_hidden = [40, 40]
             self.loss_func = mse
-            self.forward = self.forward_fc
+#            self.forward = self.forward_fc
             self.construct_weights = self.construct_fc_weights
         elif FLAGS.datasource == 'omniglot' or FLAGS.datasource == 'miniimagenet':
             self.loss_func = xent
             self.classification = True
 
-
 #   set up NN structure  
           
             if FLAGS.conv:
                 self.dim_hidden = FLAGS.num_filters
-                self.forward = self.forward_conv
+#                self.forward = self.forward_conv
                 self.construct_weights = self.construct_conv_weights
             else:
                 self.dim_hidden = [256, 128, 64, 64]
-                self.forward=self.forward_fc
+#                self.forward=self.forward_fc
                 self.construct_weights = self.construct_fc_weights
             if FLAGS.datasource == 'miniimagenet':
                 self.channels = 3
@@ -67,11 +72,15 @@ class MAML:
         else:
             raise ValueError('Unrecognized data source.')
 
+	init = tf.global_variables_initializer()
+        self.sess = tf.Session()
+        self.sess.run(init)
+
 
     def construct_conv_weights(self):
         #with tf.name_scope("bayesian_neural_net", values=[images]):
         k=3
-        neural_net = tf.keras.Sequential([
+        model = tf.keras.Sequential([
             tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, padding="SAME", activation=tf.nn.relu),
             tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
             tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=5, padding="SAME", activation=tf.nn.relu),
@@ -84,30 +93,39 @@ class MAML:
             tfp.layers.DenseFlipout(84, activation=tf.nn.relu),
             tfp.layers.DenseFlipout(self.dim_output)])
     
-        return neural_net
+        return model
 
     def construct_fc_weights(self):
         #with tf.name_scope("bayesian_neural_net", values=[images]):
+        model = tf.keras.Sequential()
+        #model = tf.keras.Sequential([tfp.layers.DenseFlipout(self.dim_hidden[0],input_shape=(self.dim_input,) ,activation=tf.nn.relu,kernel_initializer='random_uniform')])
         for i in range(len(self.dim_hidden)):
-            model.add(tfp.layers.DenseFlipout(self.dim_hidden[i], activation=tf.nn.relu))
+            model.add(tfp.layers.DenseFlipout(self.dim_hidden[i] ,activation=tf.nn.relu))
         model.add(tfp.layers.DenseFlipout(self.dim_output))
-        
-        return neural_net
+        init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
+            #    init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
+    #    sess.run(init_op)
+        with tf.Session() as sess:   
+            sess.run(init_op)
+        print('run op fc') 
+        return model
 
 
     def construct_model(self, input_tensors=None, prefix='metatrain_'):
         # a: training data for inner gradient, b: test data for meta gradient
         if input_tensors is None:
+            print('fuck its none')
             self.inputa = tf.placeholder(tf.float32)
             self.inputb = tf.placeholder(tf.float32)
             self.labela = tf.placeholder(tf.float32)
             self.labelb = tf.placeholder(tf.float32)
         else:
+            print('its not none fuck')
             self.inputa = input_tensors['inputa']
             self.inputb = input_tensors['inputb']
             self.labela = input_tensors['labela']
             self.labelb = input_tensors['labelb']
-
+	    print(self.labela)
         with tf.variable_scope('model', reuse=None) as training_scope:
             if 'weights' in dir(self):   
                 training_scope.reuse_variables()
@@ -118,8 +136,11 @@ class MAML:
             else:
                 # Define the weights /  weights stands for the model nueral_net!!!!!!!
                 self.weights = weights = self.construct_weights()
+                weights((self.inputa[0]).astype('float32'))
                 self.weights_a = weights_a = self.construct_weights()
+                weights_a((self.inputa[0]).astype('float32'))
                 self.weights_b = weights_b = self.construct_weights()
+                weights_b((self.inputa[0]).astype('float32'))
 
             # outputbs[i] and lossesb[i] is the output and loss after i+1 gradient updates
             lossesa, outputas, lossesb, outputbs = [], [], [], []
@@ -135,32 +156,48 @@ class MAML:
                 inputa, inputb, labela, labelb = inp
                 task_outputbs, task_lossesb = [], []
 
-
-                logits = weights(inputa)
-                labels_distribution = tfd.Categorical(logits=logits)
+#		print(tf.shape(inputa))
+	        #print(type(inputa))i
+                logits = weights(tf.cast(inputa, tf.float32))
+                #logits = weights(inputa_run)
+                #logits = weights(inputa.astype('float32'))
+		labels_distribution = tfd.Categorical(logits=logits)
+                #print(labels_distribution)
+                #print(labela)
                 neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(labela))
-                kl = sum(weights.losses) / len(inputa)  #???
-                elbo_loss_a = neg_log_likelihood + kl
+                kl = sum(weights.losses) / tf.cast(tf.size(inputa), tf.float32)  #???
+                #kl = sum(weights.losses) / tf.size(inputa)
+		elbo_loss_a = neg_log_likelihood + kl
                 grads_a = tf.gradients(elbo_loss_a, weights.trainable_weights) 
-                '''
+                print(grads_a)
+		'''
                 if FLAGS.stop_grad:
                     grads_a = [tf.stop_gradient(grad) for grad in grads] 
                     '''               
-                true_weights_a = [(weights.trainable_weights[i]  - self.update_lr*grads[i]) for i in range(len(grads_a))]
-                weights_a.set_weights(true_weights_a)
-
+                #true_weights_a = [tf.cast((weights.trainable_weights[i] - self.update_lr*grads_a[i]), tf.float32) for i in range(len(grads_a))]
+                true_weights_a = [(weights.trainable_weights[i] - self.update_lr*grads_a[i]) for i in range(len(grads_a))]
+		
+		#print(true_weights_a)
+	#	print(weights.get_weights())
+       #         weights_a.set_weights(true_weights_a)
+ #               print(weights_a.trainable_variables)
+		for i in range(len(true_weights_a)):
+		    tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
+                print('set weight successfully')
  #               optimizer = tf.train.AdamOptimizer(learning_rate=self.update_lr)
  #               train_op_a = optimizer.minimize(task_lossa)
-                logits = weights_a(inputb)
+                logits = weights_a(tf.cast(inputb, tf.float32))
                 labels_distribution = tfd.Categorical(logits=logits)
                 neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(labelb))
-                kl = sum(weights_a.losses) / len(inputb)  #???
+                kl = sum(weights_a.losses) / tf.cast(tf.size(inputb), tf.float32)  #???
                 elbo_loss_b = neg_log_likelihood + kl
                 grads_b = tf.gradients(elbo_loss_b, weights_a.trainable_weights) 
              
                 true_weights_b = [(weights_a.trainable_weights[i]  - self.update_lr*grads_b[i]) for i in range(len(grads_b))]
-                weights_b.set_weights(true_weights_b)
-                
+                #weights_b.set_weights(true_weights_b)
+                for i in range(len(true_weights_b)):
+                    tf.assign(weights_b.trainable_variables[i] ,true_weights_b[i] )
+
                 lossb = []
                 for i, layer in enumerate(weights.layers):
                     try:
@@ -169,7 +206,7 @@ class MAML:
                     except AttributeError:
                         continue
                 
-                task_output = [ elbo_loss_a, lossb.sum()]  #????
+                task_output = [ elbo_loss_a, sum(lossb)]  #????
                 return task_output
 
 
@@ -180,40 +217,18 @@ class MAML:
 
                 #task_lossesb.append(self.loss_func(output, labelb))
       # 1:num_updates steps for meta-loss
- '''     
-                for j in range(num_updates - 1):
-                    loss = self.loss_func(self.forward(inputa, fast_weights, reuse=True), labela)
-                    grads = tf.gradients(loss, list(fast_weights.values()))
-                    if FLAGS.stop_grad:
-                        grads = [tf.stop_gradient(grad) for grad in grads]
-                    gradients = dict(zip(fast_weights.keys(), grads))
-                    fast_weights = dict(zip(fast_weights.keys(), [fast_weights[key] - self.update_lr*gradients[key] for key in fast_weights.keys()]))
-                    output = self.forward(inputb, fast_weights, reuse=True)
-                    task_outputbs.append(output)
-                    task_lossesb.append(self.loss_func(output, labelb))  
-      
-                task_output = [task_outputa, task_outputbs, task_lossa, task_lossesb]
-
-                if self.classification:
-                    task_accuracya = tf.contrib.metrics.accuracy(tf.argmax(tf.nn.softmax(task_outputa), 1), tf.argmax(labela, 1))
-                    for j in range(num_updates):
-                        task_accuraciesb.append(tf.contrib.metrics.accuracy(tf.argmax(tf.nn.softmax(task_outputbs[j]), 1), tf.argmax(labelb, 1)))
-                    task_output.extend([task_accuracya, task_accuraciesb])
-
-                return task_output
-            #           end of meta-train func
-            '''
             
             # meta-train
-            if FLAGS.norm is not 'None':
+#            if FLAGS.norm is not 'None':
                 # to initialize the batch norm vars, might want to combine this, and not run idx 0 twice.
-                unused = task_metalearn((self.inputa[0], self.inputb[0], self.labela[0], self.labelb[0]), False)
+#                unused = task_metalearn((self.inputa[0], self.inputb[0], self.labela[0], self.labelb[0]), False)
 
-            out_dtype = [tf.float32, [tf.float32]*num_updates, tf.float32, [tf.float32]*num_updates]
+#      !!!      out_dtype = [tf.float32, [tf.float32]*num_updates, tf.float32, [tf.float32]*num_updates ]
+            out_dtype = [ tf.float32, tf.float32 ] 
             if self.classification:
                 out_dtype.extend([tf.float32, [tf.float32]*num_updates])
             result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb), dtype=out_dtype, parallel_iterations=FLAGS.meta_batch_size)
-            
+           # result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb), parallel_iterations=FLAGS.meta_batch_size)
             if self.classification:
                 #outputas, outputbs, lossesa, lossesb, accuraciesa, accuraciesb = result
                 lossesa, lossesb =result 
@@ -254,13 +269,14 @@ class MAML:
                 self.metaval_total_accuracies2 = total_accuracies2 =[tf.reduce_sum(accuraciesb[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]
 
 #########################
+        '''
         ## Summaries
         tf.summary.scalar(prefix+'Pre-update loss', total_loss1)
         if self.classification:
             tf.summary.scalar(prefix+'Pre-update accuracy', total_accuracy1)
 
-        f.summary.scalar(prefix+'Post-update loss, step ' + str(j+1), total_losses2)
-        '''
+        tf.summary.scalar(prefix+'Post-update loss, step ' + str(j+1), total_losses2)
+       
         for j in range(num_updates):
             tf.summary.scalar(prefix+'Post-update loss, step ' + str(j+1), total_losses2[j])
             
