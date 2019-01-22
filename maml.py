@@ -127,7 +127,7 @@ class MAML:
             self.labela = input_tensors['labela']
             self.labelb = input_tensors['labelb']
         '''
-        self.sigma = 0.1    # change to flag later
+        self.sigma = FLAGS.sigma    # change to flag later
         self.inputa = input_tensors['inputa']
         self.inputb = input_tensors['inputb']
         self.labela = input_tensors['labela']
@@ -163,12 +163,13 @@ class MAML:
             def task_metalearn(inp, reuse=True):
                 """ Perform gradient descent for one task in the meta-batch. """
                 inputa, inputb, labela, labelb = inp
-                task_outputbs, task_lossesb = [], []
+                task_outputbs, task_lossesb, task_lossesb_op = [], [], []
                 if self.classification:
                     task_accuraciesb = []
                 # first gradient step
                 logits = weights(tf.cast(inputa, tf.float32))
                 task_outputa = logits  #!!! maybe wrong
+                task_lossa = self.loss_func(task_outputa, labela)
                 if self.classification:
                     labels_distribution = tfd.Categorical(logits=logits)
                 else:
@@ -176,7 +177,7 @@ class MAML:
                 neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(labela, tf.float32)))
                 kl = sum(weights.losses) / tf.cast(tf.size(inputa), tf.float32)  #???               
                 elbo_loss_a = neg_log_likelihood + kl                
-                task_lossa = elbo_loss_a
+                task_lossa_op = elbo_loss_a
                 grads_a = tf.gradients(elbo_loss_a, weights.trainable_weights) 
                 '''
                     if FLAGS.stop_grad:
@@ -189,6 +190,7 @@ class MAML:
                 # posterior b
                 logits = weights_a(tf.cast(inputb, tf.float32))
                 task_outputbs.append(logits)  #!!!maybe wrong
+                task_lossesb.append(self.loss_func(logits, labelb))
                 if self.classification:
                     labels_distribution = tfd.Categorical(logits=logits)
                 else:
@@ -210,7 +212,7 @@ class MAML:
                         lossb.append( weights_a.layers[i].kernel_posterior.cross_entropy(q) - weights_b.layers[i].kernel_posterior.cross_entropy(q) )
                     except AttributeError:
                         continue
-                task_lossesb.append(sum(lossb))
+                task_lossesb_op.append(sum(lossb))
 
                 # the rest gradient steps
                 for j in range(num_updates-1): 
@@ -237,6 +239,7 @@ class MAML:
                     # posterior b
                     logits = weights_b(tf.cast(tf.concat([inputa,inputb],0), tf.float32))
                     task_outputbs.append(logits) #!!!maybe wrong
+                    task_lossesb.append(self.loss_func(logits, labelb))
                     if self.classification:
                         labels_distribution = tfd.Categorical(logits=logits)
                     else:
@@ -258,10 +261,10 @@ class MAML:
                             lossb.append( weights_a.layers[i].kernel_posterior.cross_entropy(q) - weights_b.layers[i].kernel_posterior.cross_entropy(q) )
                         except AttributeError:
                             continue
-                    task_lossesb.append(sum(lossb))
+                    task_lossesb_op.append(sum(lossb))
                 
               
-                task_output = [task_outputa, task_outputbs, task_lossa, task_lossesb]  
+                task_output = [task_outputa, task_outputbs, task_lossa, task_lossesb, task_lossa_op, task_lossesb_op ]  
                 
                 if self.classification:
                     task_accuracya = tf.contrib.metrics.accuracy(tf.argmax(tf.nn.softmax(task_outputa), 1), tf.argmax(labela, 1))
@@ -278,21 +281,24 @@ class MAML:
                 # to initialize the batch norm vars, might want to combine this, and not run idx 0 twice.
 #                unused = task_metalearn((self.inputa[0], self.inputb[0], self.labela[0], self.labelb[0]), False)
 
-            out_dtype = [tf.float32, [tf.float32]*num_updates, tf.float32, [tf.float32]*num_updates ]
+            out_dtype = [tf.float32, [tf.float32]*num_updates, tf.float32, [tf.float32]*num_updates , tf.float32, [tf.float32]*num_updates]
             #out_dtype = [ tf.float32, tf.float32 ] 
             if self.classification:
                 out_dtype.extend([tf.float32, [tf.float32]*num_updates])
             result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb), dtype=out_dtype, parallel_iterations=FLAGS.meta_batch_size)
           
             if self.classification:
-                outputas, outputbs, lossesa, lossesb, accuraciesa, accuraciesb = result              
+                outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op, accuraciesa, accuraciesb = result              
             else:
-                outputas, outputbs, lossesa, lossesb  = result
+                outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op  = result
 
         ## Performance & Optimization
         if 'train' in prefix:
             self.total_loss1 = total_loss1 = tf.reduce_sum(lossesa) / tf.to_float(FLAGS.meta_batch_size)
             self.total_losses2 = total_losses2 = [tf.reduce_sum(lossesb[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]
+            self.total_loss1_op = total_loss1_op = tf.reduce_sum(lossesa_op) / tf.to_float(FLAGS.meta_batch_size)
+            self.total_losses2_op = total_losses2_op = [tf.reduce_sum(lossesb_op[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]
+           
             # after the map_fn
             self.outputas, self.outputbs = outputas, outputbs
             
@@ -300,13 +306,13 @@ class MAML:
                 self.total_accuracy1 = total_accuracy1 = tf.reduce_sum(accuraciesa) / tf.to_float(FLAGS.meta_batch_size)
                 self.total_accuracies2 = total_accuracies2 = [tf.reduce_sum(accuraciesb[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]
             
-            self.pretrain_op = tf.train.AdamOptimizer(self.meta_lr).minimize(total_loss1)
+            self.pretrain_op = tf.train.AdamOptimizer(self.meta_lr).minimize(total_loss1_op)
                 
 
  ######  ##### optimize meta loss func                
             if FLAGS.metatrain_iterations > 0:
                 optimizer = tf.train.AdamOptimizer(self.meta_lr)
-                self.gvs = gvs = optimizer.compute_gradients(self.total_losses2[FLAGS.num_updates-1])
+                self.gvs = gvs = optimizer.compute_gradients(self.total_losses2_op[FLAGS.num_updates-1])
                 if FLAGS.datasource == 'miniimagenet': 
                     gvs = [(tf.clip_by_value(grad, -10, 10), var) for grad, var in gvs]
                 self.metatrain_op = optimizer.apply_gradients(gvs)
@@ -321,14 +327,7 @@ class MAML:
 #########################
         
         ## Summaries
-        init_op = tf.group(tf.global_variables_initializer(),
-                     tf.local_variables_initializer())
-        with tf.Session() as sess:
-            sess.run(init_op)
 
-      #      print('prefix=',prefix)
-      #      print('total_loss1=',sess.run(total_loss1))
-      #      print('total_loss2=',sess.run(total_losses2))
         tf.summary.scalar(prefix+'Pre-update loss', total_loss1)
         if self.classification:
             tf.summary.scalar(prefix+'Pre-update accuracy', total_accuracy1)
