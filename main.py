@@ -103,7 +103,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
         
 
         result = sess.run(input_tensors, feed_dict)
-
+        print(result)
         if itr % SUMMARY_INTERVAL == 0:
             prelosses.append(result[-2])
             if FLAGS.log:
