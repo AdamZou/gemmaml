@@ -216,14 +216,14 @@ class MAML:
                     neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(labela, tf.float32)))
                     kl = sum(weights_a.losses) / tf.cast(tf.size(inputa), tf.float32)  #???               
     	            elbo_loss_a = neg_log_likelihood + kl           
-                    grads_a = tf.gradients(elbo_loss_a, weights.trainable_weights) 
-		        '''
-                    if FLAGS.stop_grad:
-                        grads_a = [tf.stop_gradient(grad) for grad in grads] 
-                    '''                    
+                    grads_a = tf.gradients(elbo_loss_a, weights_a.trainable_weights) 
+		    
+                    #if FLAGS.stop_grad:
+                    #    grads_a = [tf.stop_gradient(grad) for grad in grads] 
+                                       
                     true_weights_a = [(weights_a.trainable_weights[i] - self.update_lr*grads_a[i]) for i in range(len(grads_a))]
-            		for i in range(len(true_weights_a)):
-            		    tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
+                    for i in range(len(true_weights_a)):
+                        tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
      #               print('set weight successfully')
 
                     # posterior b
