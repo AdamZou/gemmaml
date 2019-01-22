@@ -26,6 +26,8 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 tfd = tfp.distributions
+import keras.layers as kl
+#from keras.layers.normalization import BatchNormalization
 #from tensorflow_probability.python import distributions as tfd
 '''
 tfe = tf.contrib.eager
@@ -99,6 +101,10 @@ class MAML:
         #model = tf.keras.Sequential([tfp.layers.DenseFlipout(self.dim_hidden[0],input_shape=(self.dim_input,) ,activation=tf.nn.relu,kernel_initializer='random_uniform')])
         for i in range(len(self.dim_hidden)):
             model.add(tfp.layers.DenseFlipout(self.dim_hidden[i] ,activation=tf.nn.relu))
+            model.add(tf.keras.layers.Dense(self.dim_hidden[i]))
+            model.add(tf.keras.layers.BatchNormalization())
+            #model.add(tfp.bijectors.BatchNormalization())
+            #model.add(BatchNormalization())
         model.add(tfp.layers.DenseFlipout(self.dim_output))
         
      
@@ -121,7 +127,7 @@ class MAML:
             self.labela = input_tensors['labela']
             self.labelb = input_tensors['labelb']
         '''
-        self.sigma = 0.5    # change to flag later
+        self.sigma = 0.1    # change to flag later
         self.inputa = input_tensors['inputa']
         self.inputb = input_tensors['inputb']
         self.labela = input_tensors['labela']
@@ -196,6 +202,8 @@ class MAML:
                     tf.assign(weights_b.trainable_variables[i] ,true_weights_b[i] )
 
                 lossb = []
+#                weights_a = [tf.stop_gradient(weight) for weight in weights_a]
+#                weights_b = [tf.stop_gradient(weight) for weight in weights_b]
                 for i, layer in enumerate(weights.layers):
                     try:
                         q = layer.kernel_posterior
@@ -242,6 +250,8 @@ class MAML:
                         tf.assign(weights_b.trainable_variables[i] ,true_weights_b[i] )
 
                     lossb = []
+#                    weights_a = [tf.stop_gradient(weight) for weight in weights_a]
+#                    weights_b = [tf.stop_gradient(weight) for weight in weights_b]
                     for i, layer in enumerate(weights.layers):
                         try:
                             q = layer.kernel_posterior
@@ -311,6 +321,14 @@ class MAML:
 #########################
         
         ## Summaries
+        init_op = tf.group(tf.global_variables_initializer(),
+                     tf.local_variables_initializer())
+        with tf.Session() as sess:
+            sess.run(init_op)
+
+      #      print('prefix=',prefix)
+      #      print('total_loss1=',sess.run(total_loss1))
+      #      print('total_loss2=',sess.run(total_losses2))
         tf.summary.scalar(prefix+'Pre-update loss', total_loss1)
         if self.classification:
             tf.summary.scalar(prefix+'Pre-update accuracy', total_accuracy1)

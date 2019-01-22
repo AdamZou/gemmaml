@@ -63,7 +63,7 @@ flags.DEFINE_bool('stop_grad', False, 'if True, do not use second derivatives in
 ## Logging, saving, and testing options
 flags.DEFINE_bool('log', True, 'if false, do not log summaries, for debugging code.')
 flags.DEFINE_string('logdir', '/tmp/data', 'directory for summaries and checkpoints.')
-flags.DEFINE_bool('resume', True, 'resume training if there is a model available')
+flags.DEFINE_bool('resume', False, 'resume training if there is a model available')
 flags.DEFINE_bool('train', True, 'True to train, False to test.')
 flags.DEFINE_integer('test_iter', -1, 'iteration to load model (-1 for latest model)')
 flags.DEFINE_bool('test_set', False, 'Set to true to test on the the test set, False for the validation set.')
@@ -71,13 +71,13 @@ flags.DEFINE_integer('train_update_batch_size', -1, 'number of examples used for
 flags.DEFINE_float('train_update_lr', -1, 'value of inner gradient step step during training. (use if you want to test with a different value)') # 0.1 for omniglot
 
 def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
-    SUMMARY_INTERVAL = 100
+    SUMMARY_INTERVAL = 1
     SAVE_INTERVAL = 1000
     if FLAGS.datasource == 'sinusoid':
-        PRINT_INTERVAL = 1000
+        PRINT_INTERVAL = 1
         TEST_PRINT_INTERVAL = PRINT_INTERVAL*5
     else:
-        PRINT_INTERVAL = 100
+        PRINT_INTERVAL = 1
         TEST_PRINT_INTERVAL = PRINT_INTERVAL*5
 
     if FLAGS.log:
@@ -103,7 +103,11 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
         
 
         result = sess.run(input_tensors, feed_dict)
-        print(result)
+        #print('result=',result,'\n')
+        #print('result=',result[0],'\n')
+        #print('result=',result[1],'\n')
+        #print('result=',result[2],'\n')
+        #print('result=',result[3],'\n') 
         if itr % SUMMARY_INTERVAL == 0:
             prelosses.append(result[-2])
             if FLAGS.log:
