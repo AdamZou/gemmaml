@@ -152,6 +152,7 @@ class MAML:
                 self.weights_b = weights_b = self.construct_weights()
                 weights_b((self.inputa[0]).astype('float32'))
 
+
             # outputbs[i] and lossesb[i] is the output and loss after i+1 gradient updates
             lossesa, outputas, lossesb, outputbs = [], [], [], []
             accuraciesa, accuraciesb = [], []
@@ -205,12 +206,20 @@ class MAML:
                     tf.assign(weights_b.trainable_variables[i] ,true_weights_b[i] )
 
                 lossb = []
+                if (num_updates==1):
+                    for i in range(len(weights_a.trainable_variables)):
+                        tf.assign(weights_a.trainable_variables[i] ,tf.stop_gradient(weights_a.trainable_variables[i]) )
+                    for i in range(len(weights_a.trainable_variables)):
+                        tf.assign(weights_a.trainable_variables[i] ,tf.stop_gradient(weights_a.trainable_variables[i]) )
+
+
+
                 #weights_a_s = [tf.stop_gradient(weight) for weight in weights_a]
                 #weights_b_s = [tf.stop_gradient(weight) for weight in weights_b]
                 for i, layer in enumerate(weights.layers):
                     try:
                         q = layer.kernel_posterior
-                        lossb.append( weights_a_s.layers[i].kernel_posterior.cross_entropy(q) - weights_b_s.layers[i].kernel_posterior.cross_entropy(q) )
+                        lossb.append(abs( weights_a.layers[i].kernel_posterior.cross_entropy(q) - weights_b.layers[i].kernel_posterior.cross_entropy(q)) )
                     except AttributeError:
                         continue
                 task_lossesb_op.append(sum(lossb))
@@ -256,12 +265,17 @@ class MAML:
                     lossb = []
 #                    weights_a = [tf.stop_gradient(weight) for weight in weights_a]
 #                    weights_b = [tf.stop_gradient(weight) for weight in weights_b]
-                #    weights_a_s = [tf.stop_gradient(weight) for weight in weights_a]
-                #    weights_b_s = [tf.stop_gradient(weight) for weight in weights_b]
+                    if j == (num_updates-2):
+                        for i in range(len(weights_a.trainable_variables)):
+                            tf.assign(weights_a.trainable_variables[i] ,tf.stop_gradient(weights_a.trainable_variables[i]) ) 
+                        for i in range(len(weights_a.trainable_variables)):
+                            tf.assign(weights_a.trainable_variables[i] ,tf.stop_gradient(weights_a.trainable_variables[i]) )
+
+
                     for i, layer in enumerate(weights.layers):
                         try:
                             q = layer.kernel_posterior
-                            lossb.append( weights_a_s.layers[i].kernel_posterior.cross_entropy(q) - weights_b_s.layers[i].kernel_posterior.cross_entropy(q) )
+                            lossb.append(abs( weights_a.layers[i].kernel_posterior.cross_entropy(q) - weights_b.layers[i].kernel_posterior.cross_entropy(q)) )
                         except AttributeError:
                             continue
                     task_lossesb_op.append(sum(lossb))

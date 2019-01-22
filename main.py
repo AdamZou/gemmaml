@@ -180,9 +180,15 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
             inputb = batch_x[:,num_classes*FLAGS.update_batch_size:, :]
             labela = batch_y[:, :num_classes*FLAGS.update_batch_size, :]
             labelb = batch_y[:,num_classes*FLAGS.update_batch_size:, :]
-
-            feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb, model.meta_lr: 0.0}
-
+            #model.inputa = inputa, model.inputb= inputb,  model.labela= labela, model.labelb= labelb, model.meta_lr= 0.0
+            model.inputa = inputa 
+            model.inputb= inputb   
+            model.labela= labela 
+            model.labelb= labelb  
+            model.meta_lr= 0.0
+            feed_dict = {}
+            #feed_dict = {model.inputa: np.float32(inputa), model.inputb: np.float32(inputb),  model.labela: np.float32(labela), model.labelb: np.float32(labelb), model.meta_lr: 0.0}
+            #feed_dict = {model.inputa: tf.cast(inputa, tf.float32), model.inputb: tf.cast(inputb, tf.float32),  model.labela: tf.cast(labela, tf.float32), model.labelb: tf.cast(labelb, tf.float32), model.meta_lr: 0.0}
         if model.classification:
             #_ = sess.run([model.pretrain_op], feed_dict)  #######?????
             result = sess.run([model.metaval_total_accuracy1] + model.metaval_total_accuracies2, feed_dict)
@@ -280,7 +286,7 @@ def main():
         #tf_data_load = False
         tf_data_load = True
         num_classes = data_generator.num_classes
-        if FLAGS.train:
+        if FLAGS.train or FLAGS.datasource == 'sinusoid':
             random.seed(5)
             if 'generate' in dir(data_generator):
                 batch_x, batch_y, amp, phase = data_generator.generate()
@@ -321,7 +327,7 @@ def main():
     #sess = tf.InteractiveSession()
     #tf.global_variables_initializer().run()
     model = MAML(dim_input, dim_output, test_num_updates=test_num_updates)
-    if FLAGS.train or not tf_data_load:
+    if FLAGS.train or not tf_data_load or FLAGS.datasource == 'sinusoid':
         model.construct_model(input_tensors=input_tensors, prefix='metatrain_')
     if tf_data_load:
         model.construct_model(input_tensors=metaval_input_tensors, prefix='metaval_')
@@ -341,7 +347,9 @@ def main():
         FLAGS.train_update_lr = FLAGS.update_lr
 
     exp_string = 'cls_'+str(FLAGS.num_classes)+'.mbs_'+str(FLAGS.meta_batch_size) + '.ubs_' + str(FLAGS.train_update_batch_size) + '.numstep' + str(FLAGS.num_updates) + '.updatelr' + str(FLAGS.train_update_lr)
-
+    
+    if FLAGS.pretrain_iterations > 0:
+        exp_string += 'pretrain'
     if FLAGS.num_filters != 64:
         exp_string += 'hidden' + str(FLAGS.num_filters)
     if FLAGS.max_pool:
@@ -366,6 +374,7 @@ def main():
     tf.train.start_queue_runners()
 
     if FLAGS.resume or not FLAGS.train:
+        print(FLAGS.logdir + '/' + exp_string)
         model_file = tf.train.latest_checkpoint(FLAGS.logdir + '/' + exp_string)
         if FLAGS.test_iter > 0:
             model_file = model_file[:model_file.index('model')] + 'model' + str(FLAGS.test_iter)
