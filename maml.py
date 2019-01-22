@@ -151,6 +151,7 @@ class MAML:
                 self.weights_b = weights_b = self.construct_weights()
                 weights_b((self.inputa[0]).astype('float32'))
 
+
             # outputbs[i] and lossesb[i] is the output and loss after i+1 gradient updates
             lossesa, outputas, lossesb, outputbs = [], [], [], []
             accuraciesa, accuraciesb = [], []
@@ -255,6 +256,10 @@ class MAML:
                     lossb = []
 #                    weights_a = [tf.stop_gradient(weight) for weight in weights_a]
 #                    weights_b = [tf.stop_gradient(weight) for weight in weights_b]
+                    if j == (num_updates-2):
+                        weights_a.trainable_variables = [tf.stop_gradient(weight) for weight in weights_a.trainable_variables]
+                        weights_b.trainable_variables = [tf.stop_gradient(weight) for weight in weights_b.trainable_variables]
+                       
                     for i, layer in enumerate(weights.layers):
                         try:
                             q = layer.kernel_posterior
