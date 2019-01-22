@@ -11,7 +11,7 @@ except KeyError as e:
 
 from tensorflow.python.platform import flags
 from utils import mse, xent, conv_block, normalize
-
+import random
 
 import os
 import warnings
@@ -144,6 +144,7 @@ class MAML:
             else:
                 # Define the weights /  weights stands for the model nueral_net!!!!!!!
                 # run models with array input to initialize models
+                #random.seed(7)
                 self.weights = weights = self.construct_weights()
                 weights((self.inputa[0]).astype('float32'))
                 self.weights_a = weights_a = self.construct_weights()
@@ -204,12 +205,12 @@ class MAML:
                     tf.assign(weights_b.trainable_variables[i] ,true_weights_b[i] )
 
                 lossb = []
-#                weights_a = [tf.stop_gradient(weight) for weight in weights_a]
-#                weights_b = [tf.stop_gradient(weight) for weight in weights_b]
+                #weights_a_s = [tf.stop_gradient(weight) for weight in weights_a]
+                #weights_b_s = [tf.stop_gradient(weight) for weight in weights_b]
                 for i, layer in enumerate(weights.layers):
                     try:
                         q = layer.kernel_posterior
-                        lossb.append( weights_a.layers[i].kernel_posterior.cross_entropy(q) - weights_b.layers[i].kernel_posterior.cross_entropy(q) )
+                        lossb.append( weights_a_s.layers[i].kernel_posterior.cross_entropy(q) - weights_b_s.layers[i].kernel_posterior.cross_entropy(q) )
                     except AttributeError:
                         continue
                 task_lossesb_op.append(sum(lossb))
@@ -239,7 +240,7 @@ class MAML:
                     # posterior b
                     logits = weights_b(tf.cast(tf.concat([inputa,inputb],0), tf.float32))
                     task_outputbs.append(logits) #!!!maybe wrong
-                    task_lossesb.append(self.loss_func(logits, tf.cast(labelb, tf.float32)))
+                    task_lossesb.append(self.loss_func(logits, tf.cast(tf.concat([labela,labelb],0), tf.float32)))
                     if self.classification:
                         labels_distribution = tfd.Categorical(logits=logits)
                     else:
@@ -255,10 +256,12 @@ class MAML:
                     lossb = []
 #                    weights_a = [tf.stop_gradient(weight) for weight in weights_a]
 #                    weights_b = [tf.stop_gradient(weight) for weight in weights_b]
+                #    weights_a_s = [tf.stop_gradient(weight) for weight in weights_a]
+                #    weights_b_s = [tf.stop_gradient(weight) for weight in weights_b]
                     for i, layer in enumerate(weights.layers):
                         try:
                             q = layer.kernel_posterior
-                            lossb.append( weights_a.layers[i].kernel_posterior.cross_entropy(q) - weights_b.layers[i].kernel_posterior.cross_entropy(q) )
+                            lossb.append( weights_a_s.layers[i].kernel_posterior.cross_entropy(q) - weights_b_s.layers[i].kernel_posterior.cross_entropy(q) )
                         except AttributeError:
                             continue
                     task_lossesb_op.append(sum(lossb))

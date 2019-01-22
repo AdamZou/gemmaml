@@ -45,7 +45,7 @@ flags.DEFINE_integer('num_classes', 5, 'number of classes used in classification
 flags.DEFINE_string('baseline', None, 'oracle, or None')
 
 ## Training options
-flags.DEFINE_integer('sigma', 0.5, 'scale of label distribution')
+flags.DEFINE_float('sigma', 0.5, 'scale of label distribution')
 flags.DEFINE_integer('pretrain_iterations', 0, 'number of pre-training iterations.')
 flags.DEFINE_integer('metatrain_iterations', 15000, 'number of metatraining iterations.') # 15k for omniglot, 50k for sinusoid
 flags.DEFINE_integer('meta_batch_size', 25, 'number of tasks sampled per meta-update')
@@ -72,13 +72,13 @@ flags.DEFINE_integer('train_update_batch_size', -1, 'number of examples used for
 flags.DEFINE_float('train_update_lr', -1, 'value of inner gradient step step during training. (use if you want to test with a different value)') # 0.1 for omniglot
 
 def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
-    SUMMARY_INTERVAL = 1
+    SUMMARY_INTERVAL = 100
     SAVE_INTERVAL = 1000
     if FLAGS.datasource == 'sinusoid':
-        PRINT_INTERVAL = 1
+        PRINT_INTERVAL = 1000
         TEST_PRINT_INTERVAL = PRINT_INTERVAL*5
     else:
-        PRINT_INTERVAL = 1
+        PRINT_INTERVAL = 100
         TEST_PRINT_INTERVAL = PRINT_INTERVAL*5
 
     if FLAGS.log:
