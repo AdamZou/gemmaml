@@ -302,12 +302,20 @@ class MAML:
                     
                     # posterior b
                     #logits = weights_b(tf.cast(tf.concat([inputa,inputb],0), tf.float32))
-                    mean , std = predict(weights_b,tf.concat([inputa,inputb],0))
+                    #mean , std = predict(weights_b,tf.concat([inputa,inputb],0))
                     if self.classification:
-                        labels_distribution = tfd.Categorical(logits=mean)
+                        mean , std = predict(weights_b,inputa)
+                        labels_distribution_a = tfd.Categorical(logits=mean)
+                        neg_log_likelihood_a = -tf.reduce_mean(labels_distribution_a.log_prob(tf.cast(labela, tf.float32)))               
+                        mean , std = predict(weights_b,inputb)
+                        labels_distribution_b = tfd.Categorical(logits=mean)
+                        neg_log_likelihood_b = -tf.reduce_mean(labels_distribution_b.log_prob(tf.cast(labelb, tf.float32)))               
+                        neg_log_likelihood = neg_log_likelihood_a + neg_log_likelihood_b
+
                     else:
+                        mean , std = predict(weights_b,tf.concat([inputa,inputb],0))
                         labels_distribution = tfd.Normal(loc=mean ,scale= std) #???
-                    neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(tf.concat([labela,labelb],0), tf.float32)))               
+                        neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(tf.concat([labela,labelb],0), tf.float32)))               
                     kl = sum(weights_b.losses) / tf.cast(tf.size(inputa)+tf.size(inputb), tf.float32)  #???
                     elbo_loss_b = neg_log_likelihood + kl
                     grads_b = tf.gradients(elbo_loss_b, weights_b.trainable_weights)                 
