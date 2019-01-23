@@ -170,7 +170,7 @@ class MAML:
                     task_accuraciesb = []
                 # first gradient step  
                 logits = weights(tf.cast(inputa, tf.float32))
-                task_outputa = logits  #!!! maybe wrong
+                task_outputa = tf.argmax(logits, axis=1)  #!!! maybe wrong
                 task_lossa = self.loss_func(task_outputa, tf.cast(labela, tf.float32))
                 if self.classification:
                     labels_distribution = tfd.Categorical(logits=logits)
@@ -191,8 +191,8 @@ class MAML:
 
                 # posterior b
                 logits = weights_a(tf.cast(inputb, tf.float32))
-                task_outputbs.append(logits)  #!!!maybe wrong
-                task_lossesb.append(self.loss_func(logits, tf.cast(labelb, tf.float32)))
+                task_outputbs.append(tf.argmax(logits, axis=1))  #!!!maybe wrong
+                task_lossesb.append(self.loss_func(tf.argmax(logits, axis=1), tf.cast(labelb, tf.float32)))
                 if self.classification:
                     labels_distribution = tfd.Categorical(logits=logits)
                 else:
@@ -246,7 +246,7 @@ class MAML:
                         tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
      #               print('set weight successfully')
 
-                    output = weights_a(tf.cast(inputb, tf.float32))
+                    output = tf.argmax(weights_a(tf.cast(inputb, tf.float32)), axis=1)
                     task_outputbs.append(output) #!!!maybe wrong
                     task_lossesb.append(self.loss_func(ouput, tf.cast(labelb, tf.float32)))
                     
