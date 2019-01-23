@@ -46,6 +46,7 @@ flags.DEFINE_string('baseline', None, 'oracle, or None')
 
 ## Training options
 flags.DEFINE_float('sigma', 0.5, 'scale of label distribution')
+flags.DEFINE_integer('num_repeat', 10, 'number of repeated runnings for each prediction')
 flags.DEFINE_integer('pretrain_iterations', 0, 'number of pre-training iterations.')
 flags.DEFINE_integer('metatrain_iterations', 15000, 'number of metatraining iterations.') # 15k for omniglot, 50k for sinusoid
 flags.DEFINE_integer('meta_batch_size', 25, 'number of tasks sampled per meta-update')
@@ -181,6 +182,7 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
             labela = batch_y[:, :num_classes*FLAGS.update_batch_size, :]
             labelb = batch_y[:,num_classes*FLAGS.update_batch_size:, :]
             #model.inputa = inputa, model.inputb= inputb,  model.labela= labela, model.labelb= labelb, model.meta_lr= 0.0
+            print(inputa.shape,inputa[0])
             model.inputa = inputa 
             model.inputb= inputb   
             model.labela= labela 
@@ -387,6 +389,8 @@ def main():
     if FLAGS.train:
         train(model, saver, sess, exp_string, data_generator, resume_itr)
     else:
+        #with tf.Session() as sess:
+        #    print(sess.run(model.weights.trainable_weights))
         test(model, saver, sess, exp_string, data_generator, test_num_updates)
 
 if __name__ == "__main__":
