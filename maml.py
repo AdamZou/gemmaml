@@ -81,7 +81,7 @@ class MAML:
         #with tf.name_scope("bayesian_neural_net", values=[images]):
         k=3
         model = tf.keras.Sequential([
-            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, padding="SAME", activation=tf.nn.relu),
+            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, padding="SAME", activation=tf.nn.relu,input_shape=(28, 28, 1)),
             tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
             tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=5, padding="SAME", activation=tf.nn.relu),
             tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
@@ -145,12 +145,20 @@ class MAML:
                 # Define the weights /  weights stands for the model nueral_net!!!!!!!
                 # run models with array input to initialize models
                 #random.seed(7)
-                self.weights = weights = self.construct_weights()
-                weights((self.inputa[0]).astype('float32'))
-                self.weights_a = weights_a = self.construct_weights()
-                weights_a((self.inputa[0]).astype('float32'))
-                self.weights_b = weights_b = self.construct_weights()
-                weights_b((self.inputa[0]).astype('float32'))
+                if FLAGS.datasource == 'sinusoid':
+                    self.weights = weights = self.construct_weights()
+                    weights((self.inputa[0]).astype('float32'))
+                    self.weights_a = weights_a = self.construct_weights()
+                    weights_a((self.inputa[0]).astype('float32'))
+                    self.weights_b = weights_b = self.construct_weights()
+                    weights_b((self.inputa[0]).astype('float32'))
+                else:
+                    self.weights = weights = self.construct_weights()
+                    #weights(self.inputa)
+                    self.weights_a = weights_a = self.construct_weights()
+                    #weights_a(self.inputa[0])
+                    self.weights_b = weights_b = self.construct_weights()
+                    #weights_b(self.inputa[0])
 
 
             # outputbs[i] and lossesb[i] is the output and loss after i+1 gradient updates
@@ -248,7 +256,7 @@ class MAML:
 
                     output = weights_a(tf.cast(inputb, tf.float32))
                     task_outputbs.append(output) #!!!maybe wrong
-                    task_lossesb.append(self.loss_func(ouput, tf.cast(labelb, tf.float32)))
+                    task_lossesb.append(self.loss_func(output, tf.cast(labelb, tf.float32)))
                     
                     # posterior b
                     logits = weights_b(tf.cast(tf.concat([inputa,inputb],0), tf.float32))
