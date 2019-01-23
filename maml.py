@@ -36,7 +36,43 @@ try:
 except ValueError:
     pass
 '''
+
+def reduce_var(x, axis=None, keepdims=False):
+    """Variance of a tensor, alongside the specified axis.
+
+    # Arguments
+        x: A tensor or variable.
+        axis: An integer, the axis to compute the variance.
+        keepdims: A boolean, whether to keep the dimensions or not.
+            If `keepdims` is `False`, the rank of the tensor is reduced
+            by 1. If `keepdims` is `True`,
+            the reduced dimension is retained with length 1.
+
+    # Returns
+        A tensor with the variance of elements of `x`.
+    """
+    m = tf.reduce_mean(x, axis=axis, keep_dims=True)
+    devs_squared = tf.square(x - m)
+    return tf.reduce_mean(devs_squared, axis=axis, keep_dims=keepdims)
+
+def reduce_std(x, axis=None, keepdims=False):
+    """Standard deviation of a tensor, alongside the specified axis.
+
+    # Arguments
+        x: A tensor or variable.
+        axis: An integer, the axis to compute the standard deviation.
+        keepdims: A boolean, whether to keep the dimensions or not.
+            If `keepdims` is `False`, the rank of the tensor is reduced
+            by 1. If `keepdims` is `True`,
+            the reduced dimension is retained with length 1.
+
+    # Returns
+        A tensor with the standard deviation of elements of `x`.
+    """
+    return tf.sqrt(reduce_var(x, axis=axis, keepdims=keepdims))
+
 FLAGS = flags.FLAGS
+
 
 class MAML:
     def __init__(self, dim_input=1, dim_output=1, test_num_updates=5):
@@ -127,7 +163,8 @@ class MAML:
             self.labela = input_tensors['labela']
             self.labelb = input_tensors['labelb']
         '''
-        self.sigma = FLAGS.sigma    # change to flag later
+        self.sigma = FLAGS.sigma    
+        self.num_repeat = FLAGS.num_repeat
         self.inputa = input_tensors['inputa']
         self.inputb = input_tensors['inputb']
         self.labela = input_tensors['labela']
@@ -169,13 +206,23 @@ class MAML:
                 if self.classification:
                     task_accuraciesb = []
                 # first gradient step  
-                logits = weights(tf.cast(inputa, tf.float32))
-                task_outputa = tf.argmax(logits, axis=1)  #!!! maybe wrong
+
+                def predict(NN,inputs):
+                    logits=[]
+                    for i in range(self.num_repeat):
+                        logits.append(NN(tf.cast(inputs, tf.float32)))
+                    mean = tf.reduce_mean(logits,0)
+                    std = reduce_std(logits,0)
+                    return mean, std
+                
+                mean , std = predict(weights,inputa)
+                task_outputa = mean  #!!! maybe wrong
                 task_lossa = self.loss_func(task_outputa, tf.cast(labela, tf.float32))
+
                 if self.classification:
-                    labels_distribution = tfd.Categorical(logits=logits)
+                    labels_distribution = tfd.Categorical(logits=mean)
                 else:
-                    labels_distribution = tfd.Normal(loc=logits ,scale= self.sigma) #???           
+                    labels_distribution = tfd.Normal(loc=mean ,scale= std) #???           
                 neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(labela, tf.float32)))
                 kl = sum(weights.losses) / tf.cast(tf.size(inputa), tf.float32)  #???               
                 elbo_loss_a = neg_log_likelihood + kl                
@@ -190,13 +237,14 @@ class MAML:
                     tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
 
                 # posterior b
-                logits = weights_a(tf.cast(inputb, tf.float32))
-                task_outputbs.append(tf.argmax(logits, axis=1))  #!!!maybe wrong
-                task_lossesb.append(self.loss_func(tf.argmax(logits, axis=1), tf.cast(labelb, tf.float32)))
+                
+                mean , std = predict(weights_a,inputb)
+                task_outputbs.append(mean)  #!!!maybe wrong
+                task_lossesb.append(self.loss_func(mean, tf.cast(labelb, tf.float32)))
                 if self.classification:
-                    labels_distribution = tfd.Categorical(logits=logits)
+                    labels_distribution = tfd.Categorical(logits=mean)
                 else:
-                    labels_distribution = tfd.Normal(loc=logits ,scale= self.sigma) #???
+                    labels_distribution = tfd.Normal(loc=mean ,scale= std) #???
                 neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(labelb, tf.float32)))               
                 kl = sum(weights_a.losses) / tf.cast(tf.size(inputb), tf.float32)  #???
                 elbo_loss_b = neg_log_likelihood + kl
@@ -228,11 +276,12 @@ class MAML:
                 for j in range(num_updates-1): 
                     # posterior a 
              
-                    logits = weights_a(tf.cast(inputa, tf.float32))
+                    #logits = weights_a(tf.cast(inputa, tf.float32))
+                    mean , std = predict(weights_a,inputa)
                     if self.classification:
-                        labels_distribution = tfd.Categorical(logits=logits)
+                        labels_distribution = tfd.Categorical(logits=mean)
                     else:
-                        labels_distribution = tfd.Normal(loc=logits ,scale= self.sigma) #???           
+                        labels_distribution = tfd.Normal(loc=mean ,scale= std) #???           
                     neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(labela, tf.float32)))
                     kl = sum(weights_a.losses) / tf.cast(tf.size(inputa), tf.float32)  #???               
     	            elbo_loss_a = neg_log_likelihood + kl           
@@ -245,17 +294,19 @@ class MAML:
                     for i in range(len(true_weights_a)):
                         tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
      #               print('set weight successfully')
-
-                    output = tf.argmax(weights_a(tf.cast(inputb, tf.float32)), axis=1)
-                    task_outputbs.append(output) #!!!maybe wrong
-                    task_lossesb.append(self.loss_func(ouput, tf.cast(labelb, tf.float32)))
+                 
+                    #output = tf.argmax(weights_a(tf.cast(inputb, tf.float32)), axis=1)
+                    mean , std = predict(weights_a,inputb)
+                    task_outputbs.append(mean) #!!!maybe wrong
+                    task_lossesb.append(self.loss_func(mean, tf.cast(labelb, tf.float32)))
                     
                     # posterior b
-                    logits = weights_b(tf.cast(tf.concat([inputa,inputb],0), tf.float32))
+                    #logits = weights_b(tf.cast(tf.concat([inputa,inputb],0), tf.float32))
+                    mean , std = predict(weights_b,tf.concat([inputa,inputb],0))
                     if self.classification:
-                        labels_distribution = tfd.Categorical(logits=logits)
+                        labels_distribution = tfd.Categorical(logits=mean)
                     else:
-                        labels_distribution = tfd.Normal(loc=logits ,scale= self.sigma) #???
+                        labels_distribution = tfd.Normal(loc=mean ,scale= std) #???
                     neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(tf.concat([labela,labelb],0), tf.float32)))               
                     kl = sum(weights_b.losses) / tf.cast(tf.size(inputa)+tf.size(inputb), tf.float32)  #???
                     elbo_loss_b = neg_log_likelihood + kl
