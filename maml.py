@@ -235,7 +235,8 @@ class MAML:
                 if self.classification:
                     labels_distribution = tfd.Categorical(logits=mean)
                 else:
-                    labels_distribution = tfd.Normal(loc=mean ,scale= std) #???           
+                    #labels_distribution = tfd.Normal(loc=mean ,scale= std) #???     
+                    labels_distribution = tfd.Normal(loc=mean ,scale= self.sigma)
                 neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(labela, tf.float32)))
                 kl = sum(weights.losses) / tf.cast(tf.size(inputa), tf.float32)  #???               
                 elbo_loss_a = neg_log_likelihood + kl                
@@ -262,7 +263,8 @@ class MAML:
                 if self.classification:
                     labels_distribution = tfd.Categorical(logits=mean)
                 else:
-                    labels_distribution = tfd.Normal(loc=mean ,scale= std) #???
+                    #labels_distribution = tfd.Normal(loc=mean ,scale= std) #???
+                    labels_distribution = tfd.Normal(loc=mean ,scale= self.sigma)
                 neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(labelb, tf.float32)))               
                 kl = sum(weights_a.losses) / tf.cast(tf.size(inputb), tf.float32)  #???
                 elbo_loss_b = neg_log_likelihood + kl
@@ -299,7 +301,8 @@ class MAML:
                     if self.classification:
                         labels_distribution = tfd.Categorical(logits=mean)
                     else:
-                        labels_distribution = tfd.Normal(loc=mean ,scale= std) #???           
+                        #labels_distribution = tfd.Normal(loc=mean ,scale= std) #???    
+                        labels_distribution = tfd.Normal(loc=mean ,scale= self.sigma)       
                     neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(labela, tf.float32)))
                     kl = sum(weights_a.losses) / tf.cast(tf.size(inputa), tf.float32)  #???               
     	            elbo_loss_a = neg_log_likelihood + kl           
@@ -332,7 +335,8 @@ class MAML:
 
                     else:
                         mean , std = predict(weights_b,tf.concat([inputa,inputb],0))
-                        labels_distribution = tfd.Normal(loc=mean ,scale= std) #???
+                        #labels_distribution = tfd.Normal(loc=mean ,scale= std) #???
+                        labels_distribution = tfd.Normal(loc=mean ,scale= self.sigma)
                         neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(tf.concat([labela,labelb],0), tf.float32)))               
                     kl = sum(weights_b.losses) / tf.cast(tf.size(inputa)+tf.size(inputb), tf.float32)  #???
                     elbo_loss_b = neg_log_likelihood + kl
