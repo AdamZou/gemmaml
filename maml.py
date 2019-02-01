@@ -26,7 +26,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 tfd = tfp.distributions
-import keras.layers as kl
+#import keras.layers as kl
 #from keras.layers.normalization import BatchNormalization
 #from tensorflow_probability.python import distributions as tfd
 '''
@@ -116,14 +116,16 @@ class MAML:
     def construct_conv_weights(self):
         #with tf.name_scope("bayesian_neural_net", values=[images]):
         k=3
+        channels = self.channels
         model = tf.keras.Sequential([
             #tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, padding="SAME", activation=tf.nn.relu,input_shape=(None,28, 28, 1)),
+            tf.keras.layers.Reshape((-1,channels,self.img_size, self.img_size)),
             tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, padding="SAME", activation=tf.nn.relu),
-            tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
+            #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
             tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=5, padding="SAME", activation=tf.nn.relu),
-            tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
+            #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
             tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=5, padding="SAME",activation=tf.nn.relu),
-            tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
+            #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
             tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=5, padding="SAME",activation=tf.nn.relu),
             tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
             tf.keras.layers.Flatten(), 
@@ -218,17 +220,24 @@ class MAML:
 
                 def predict(NN,inputs):
                     logits=[]
+                    print('num_repeat=',self.num_repeat)
                     for i in range(self.num_repeat):
                         logits.append(NN(tf.cast(inputs, tf.float32)))
                     mean = tf.reduce_mean(logits,0)
                     std = reduce_std(logits,0)
+                    #print(mean,std)
                     return mean, std
                 
                 if FLAGS.datasource == 'omniglot': 
                     channels = self.channels
-                    inputa = tf.reshape(inputa, [-1, self.img_size, self.img_size, channels])
-                    inputb = tf.reshape(inputb, [-1, self.img_size, self.img_size, channels])
-                mean , std = predict(weights,inputa)
+                    #inputa = tf.reshape(inputa, [-1, self.img_size, self.img_size, channels])
+                    #inputb = tf.reshape(inputb, [-1, self.img_size, self.img_size, channels])
+                if not self.classification:
+                    mean , std = predict(weights,inputa)
+                    
+                else:
+                    #print(tf.cast(inputa, tf.float32))
+                    mean = weights(tf.cast(inputa, tf.float32))
                 task_outputa = mean  #!!! maybe wrong
                 task_lossa = self.loss_func(task_outputa, tf.cast(labela, tf.float32))
 
@@ -251,13 +260,15 @@ class MAML:
                 weights_b(tf.cast(inputa, tf.float32))
 
                 true_weights_a = [(weights.trainable_weights[i] - self.update_lr*grads_a[i]) for i in range(len(grads_a))]
-                print(true_weights_a,weights_a.trainable_variables)
+                #print(true_weights_a,weights_a.trainable_variables)
                 for i in range(len(true_weights_a)):
                     tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
 
                 # posterior b
-                
-                mean , std = predict(weights_a,inputb)
+                if not self.classification:
+                    mean , std = predict(weights_a,inputb)
+                else: 
+                    mean = weights_a(tf.cast(inputb, tf.float32))
                 task_outputbs.append(mean)  #!!!maybe wrong
                 task_lossesb.append(self.loss_func(mean, tf.cast(labelb, tf.float32)))
                 if self.classification:
@@ -297,7 +308,11 @@ class MAML:
                     # posterior a 
              
                     #logits = weights_a(tf.cast(inputa, tf.float32))
-                    mean , std = predict(weights_a,inputa)
+                    if not self.classification:
+                        mean , std = predict(weights_a,inputa)
+                    else: 
+                        mean = weights_a(tf.cast(inputa, tf.float32))
+
                     if self.classification:
                         labels_distribution = tfd.Categorical(logits=mean)
                     else:
@@ -317,7 +332,10 @@ class MAML:
      #               print('set weight successfully')
                  
                     #output = tf.argmax(weights_a(tf.cast(inputb, tf.float32)), axis=1)
-                    mean , std = predict(weights_a,inputb)
+                    if not self.classification:
+                        mean , std = predict(weights_a,inputb)
+                    else: 
+                        mean = weights_a(tf.cast(inputb, tf.float32))  
                     task_outputbs.append(mean) #!!!maybe wrong
                     task_lossesb.append(self.loss_func(mean, tf.cast(labelb, tf.float32)))
                     
@@ -325,10 +343,12 @@ class MAML:
                     #logits = weights_b(tf.cast(tf.concat([inputa,inputb],0), tf.float32))
                     #mean , std = predict(weights_b,tf.concat([inputa,inputb],0))
                     if self.classification:
-                        mean , std = predict(weights_b,inputa)
+                        #mean , std = predict(weights_b,inputa)
+                        mean = weights_b(tf.cast(inputa, tf.float32))  
                         labels_distribution_a = tfd.Categorical(logits=mean)
                         neg_log_likelihood_a = -tf.reduce_mean(labels_distribution_a.log_prob(tf.cast(labela, tf.float32)))               
-                        mean , std = predict(weights_b,inputb)
+                        #mean , std = predict(weights_b,inputb)
+                        mean = weights_b(tf.cast(inputb, tf.float32))  
                         labels_distribution_b = tfd.Categorical(logits=mean)
                         neg_log_likelihood_b = -tf.reduce_mean(labels_distribution_b.log_prob(tf.cast(labelb, tf.float32)))               
                         neg_log_likelihood = neg_log_likelihood_a + neg_log_likelihood_b
