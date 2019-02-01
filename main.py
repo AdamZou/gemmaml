@@ -45,8 +45,8 @@ flags.DEFINE_integer('num_classes', 5, 'number of classes used in classification
 flags.DEFINE_string('baseline', None, 'oracle, or None')
 
 ## Training options
-flags.DEFINE_float('sigma', 0.5, 'scale of label distribution')
-flags.DEFINE_integer('num_repeat', 10, 'number of repeated runnings for each prediction')
+flags.DEFINE_float('sigma', 1.0, 'scale of label distribution')
+flags.DEFINE_integer('num_repeat', 1, 'number of repeated runnings for each prediction')
 flags.DEFINE_integer('pretrain_iterations', 0, 'number of pre-training iterations.')
 flags.DEFINE_integer('metatrain_iterations', 15000, 'number of metatraining iterations.') # 15k for omniglot, 50k for sinusoid
 flags.DEFINE_integer('meta_batch_size', 25, 'number of tasks sampled per meta-update')
@@ -182,7 +182,7 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
             labela = batch_y[:, :num_classes*FLAGS.update_batch_size, :]
             labelb = batch_y[:,num_classes*FLAGS.update_batch_size:, :]
             #model.inputa = inputa, model.inputb= inputb,  model.labela= labela, model.labelb= labelb, model.meta_lr= 0.0
-            print(inputa.shape,inputa[0])
+            #print(inputa.shape,inputa[0])
             model.inputa = inputa 
             model.inputb= inputb   
             model.labela= labela 
@@ -335,7 +335,9 @@ def main():
         model.construct_model(input_tensors=metaval_input_tensors, prefix='metaval_')
     model.summ_op = tf.summary.merge_all()
 
-    saver = loader = tf.train.Saver(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES), max_to_keep=10)
+    #saver = loader = tf.train.Saver(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES), max_to_keep=10)
+    saver = loader = tf.train.Saver(model.weights.trainable_variables, max_to_keep=2)
+
 
     sess = tf.InteractiveSession()
 
@@ -391,7 +393,9 @@ def main():
     else:
         #with tf.Session() as sess:
         #    print(sess.run(model.weights.trainable_weights))
-        test(model, saver, sess, exp_string, data_generator, test_num_updates)
+        test(model, saver, sess, exp_string, data_generator, test_num_updates) 
+        #with tf.Session() as sess:
+        #print(sess.run(model.weights.trainable_weights))
 
 if __name__ == "__main__":
     main()
