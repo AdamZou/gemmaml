@@ -171,6 +171,22 @@ class MAML:
         self.labela = input_tensors['labela']
         self.labelb = input_tensors['labelb']
 
+        N_task = len(self.inputa)
+        self.weights_a, self.weights_b, self.weights_output = [],[],[]
+
+        for i in range(N_task):
+            weights_a = self.construct_weights()
+            weights_a((self.inputa[0]).astype('float32'))
+            weights_b = self.construct_weights()
+            weights_b((self.inputa[0]).astype('float32'))
+            weights_output = self.construct_weights()
+            weights_output((self.inputa[0]).astype('float32'))
+            self.weights_a.append(weights_a)
+            self.weights_b.append(weights_b)
+            self.weights_output.append(weights_output)
+
+
+
 	 #   print(self.labela)
         with tf.variable_scope('model', reuse=None) as training_scope:
             if 'weights' in dir(self):   
@@ -180,7 +196,6 @@ class MAML:
                 weights_a = self.weights_a
                 weights_b = self.weights_b
                 weights_output = self.weights_output
-                weights_test = self.weights_test
 		'''
             else:
                 # Define the weights /  weights stands for the model nueral_net!!!!!!!
@@ -221,14 +236,7 @@ class MAML:
 
             def task_metalearn(inp, reuse=True):
                 """ Perform gradient descent for one task in the meta-batch. """
-                weights_a = self.construct_weights()
-                weights_a((self.inputa[0]).astype('float32'))
-                weights_b = self.construct_weights()
-                weights_b((self.inputa[0]).astype('float32'))
-                weights_output = self.construct_weights()
-                weights_output((self.inputa[0]).astype('float32'))
-
-                inputa, inputb, labela, labelb = inp
+                inputa, inputb, labela, labelb, weights_a, weights_b, weights_output = inp
                 task_outputbs, task_lossesb, task_lossesb_op = [], [], []
                 if self.classification:
                     task_accuraciesb = []
@@ -457,7 +465,7 @@ class MAML:
             #out_dtype = [ tf.float32, tf.float32 ] 
             if self.classification:
                 out_dtype.extend([tf.float32, [tf.float32]*num_updates])
-            result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb), dtype=out_dtype, parallel_iterations=FLAGS.meta_batch_size)
+            result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb, self.weights_a, self.weights_b, self.weights_output), dtype=out_dtype, parallel_iterations=FLAGS.meta_batch_size)
           
             if self.classification:
                 outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op, accuraciesa, accuraciesb = result              
