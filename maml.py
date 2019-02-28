@@ -173,6 +173,7 @@ class MAML:
 
         N_task = len(self.inputa)
         self.weights_a, self.weights_b, self.weights_output = [],[],[]
+        task_number = range(N_task)
 
         for i in range(N_task):
             weights_a = self.construct_weights()
@@ -236,8 +237,13 @@ class MAML:
 
             def task_metalearn(inp, reuse=True):
                 """ Perform gradient descent for one task in the meta-batch. """
-                inputa, inputb, labela, labelb, weights_a, weights_b, weights_output = inp
+                inputa, inputb, labela, labelb, task_number = inp
                 task_outputbs, task_lossesb, task_lossesb_op = [], [], []
+                weights_a = self.weights_a[task_number]
+                weights_b = self.weights_b[task_number]
+                weights_output = self.weights_output[task_number]
+
+
                 if self.classification:
                     task_accuraciesb = []
                 # first gradient step  
@@ -465,7 +471,7 @@ class MAML:
             #out_dtype = [ tf.float32, tf.float32 ] 
             if self.classification:
                 out_dtype.extend([tf.float32, [tf.float32]*num_updates])
-            result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb, self.weights_a, self.weights_b, self.weights_output), dtype=out_dtype, parallel_iterations=FLAGS.meta_batch_size)
+            result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb, task_number), dtype=out_dtype, parallel_iterations=FLAGS.meta_batch_size)
           
             if self.classification:
                 outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op, accuraciesa, accuraciesb = result              
