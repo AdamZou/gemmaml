@@ -197,6 +197,8 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
         else:  # this is for sinusoid
             #_ = sess.run([model.pretrain_op], feed_dict)  #######?????
             result = sess.run([model.total_loss1] +  model.total_losses2, feed_dict)
+            #print(sess.run(model.outputas))
+            #print(sess.run(model.weights_output.layers[0].kernel_posterior.mean()))
         metaval_accuracies.append(result)
 
     metaval_accuracies = np.array(metaval_accuracies)
@@ -377,6 +379,9 @@ def main():
     tf.global_variables_initializer().run()
     tf.train.start_queue_runners()
 
+#    print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
+#    print(sess.run(model.weights_test.layers[0].kernel_posterior.mean()))
+
     if FLAGS.resume or not FLAGS.train:
         print(FLAGS.logdir + '/' + exp_string)
         model_file = tf.train.latest_checkpoint(FLAGS.logdir + '/' + exp_string)
@@ -391,11 +396,10 @@ def main():
     if FLAGS.train:
         train(model, saver, sess, exp_string, data_generator, resume_itr)
     else:
-        #with tf.Session() as sess:
-        #    print(sess.run(model.weights.trainable_weights))
+        #print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
         test(model, saver, sess, exp_string, data_generator, test_num_updates) 
-        #with tf.Session() as sess:
-        #print(sess.run(model.weights.trainable_weights))
+        #print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
+        #print(sess.run(model.weights_test.layers[0].kernel_posterior.mean()))       
 
 if __name__ == "__main__":
     main()

@@ -140,10 +140,8 @@ class MAML:
         #model = tf.keras.Sequential([tfp.layers.DenseFlipout(self.dim_hidden[0],input_shape=(self.dim_input,) ,activation=tf.nn.relu,kernel_initializer='random_uniform')])
         for i in range(len(self.dim_hidden)):
             model.add(tfp.layers.DenseFlipout(self.dim_hidden[i] ,activation=tf.nn.relu))
-            model.add(tf.keras.layers.Dense(self.dim_hidden[i]))
-            model.add(tf.keras.layers.BatchNormalization())
-            #model.add(tfp.bijectors.BatchNormalization())
-            #model.add(BatchNormalization())
+            #model.add(tf.keras.layers.Dense(self.dim_hidden[i]))
+            #model.add(tf.keras.layers.BatchNormalization())
         model.add(tfp.layers.DenseFlipout(self.dim_output))
         
      
@@ -178,9 +176,12 @@ class MAML:
             if 'weights' in dir(self):   
                 training_scope.reuse_variables()
                 weights = self.weights
+                '''
                 weights_a = self.weights_a
                 weights_b = self.weights_b
-
+                weights_output = self.weights_output
+                weights_test = self.weights_test
+		'''
             else:
                 # Define the weights /  weights stands for the model nueral_net!!!!!!!
                 # run models with array input to initialize models
@@ -188,17 +189,24 @@ class MAML:
                 if FLAGS.datasource == 'sinusoid':
                     self.weights = weights = self.construct_weights()
                     weights((self.inputa[0]).astype('float32'))
+                    '''
                     self.weights_a = weights_a = self.construct_weights()
                     weights_a((self.inputa[0]).astype('float32'))
                     self.weights_b = weights_b = self.construct_weights()
                     weights_b((self.inputa[0]).astype('float32'))
+                    self.weights_output = weights_output = self.construct_weights()
+                    weights_output((self.inputa[0]).astype('float32'))
+                    self.weights_test = weights_test = self.construct_weights()
+                    weights_test((self.inputa[0]).astype('float32'))
+                    '''
                 else:
                     self.weights = weights = self.construct_weights()
                     #weights(self.inputa[0])
-                    self.weights_a = weights_a = self.construct_weights()
+                    #self.weights_a = weights_a = self.construct_weights()
                     #weights_a(self.inputa[0])
-                    self.weights_b = weights_b = self.construct_weights()
+                    #self.weights_b = weights_b = self.construct_weights()
                     #weights_b(self.inputa[0])
+
 
 
             # outputbs[i] and lossesb[i] is the output and loss after i+1 gradient updates
@@ -209,9 +217,17 @@ class MAML:
             lossesb = [[]]*num_updates
             accuraciesb = [[]]*num_updates            
             
+#            weights_test.layers[0].kernel_posterior = tfd.Independent(tfd.Normal(loc=weights.layers[0].kernel_posterior.mean(),scale=0.000000001))
 
             def task_metalearn(inp, reuse=True):
                 """ Perform gradient descent for one task in the meta-batch. """
+                weights_a = self.construct_weights()
+                weights_a((self.inputa[0]).astype('float32'))
+                weights_b = self.construct_weights()
+                weights_b((self.inputa[0]).astype('float32'))
+                weights_output = self.construct_weights()
+                weights_output((self.inputa[0]).astype('float32'))
+
                 inputa, inputb, labela, labelb = inp
                 task_outputbs, task_lossesb, task_lossesb_op = [], [], []
                 if self.classification:
@@ -220,13 +236,21 @@ class MAML:
 
                 def predict(NN,inputs):
                     logits=[]
-                    print('num_repeat=',self.num_repeat)
+                    #print('num_repeat=',self.num_repeat)
                     for i in range(self.num_repeat):
                         logits.append(NN(tf.cast(inputs, tf.float32)))
                     mean = tf.reduce_mean(logits,0)
                     std = reduce_std(logits,0)
                     #print(mean,std)
                     return mean, std
+
+                def deter(model_out,model):
+                    for i, layer in enumerate(model_out.layers):
+                        try:
+                            layer.kernel_posterior = tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001))
+                            
+                        except AttributeError:
+                            continue
                 
                 if FLAGS.datasource == 'omniglot': 
                     channels = self.channels
@@ -238,9 +262,25 @@ class MAML:
                 else:
                     #print(tf.cast(inputa, tf.float32))
                     mean = weights(tf.cast(inputa, tf.float32))
-                task_outputa = mean  #!!! maybe wrong
-                task_lossa = self.loss_func(task_outputa, tf.cast(labela, tf.float32))
 
+                #deter(weights_output,weights)
+                #weights_test.layers[0].kernel_posterior = tfd.Independent(tfd.Normal(loc=weights.layers[0].kernel_posterior.mean(),scale=0.000000001))
+                               
+
+                for i, layer in enumerate(weights_output.layers):
+                    try:
+                        layer.kernel_posterior = tfd.Independent(tfd.Normal(loc=weights.layers[i].kernel_posterior.mean(),scale=0.000000001))
+                        print('layer',i)
+                    except AttributeError:
+                        continue
+                task_outputa = weights_output(tf.cast(inputa, tf.float32))  #!!! maybe wrong
+                #init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
+		#sess=tf.InteractiveSession()
+                #tf.global_variables_initializer().run()
+    		    #sess.run(init_op)
+                #print(sess.run(task_outputa))
+                task_lossa = self.loss_func(task_outputa, tf.cast(labela, tf.float32))
+                
                 if self.classification:
                     labels_distribution = tfd.Categorical(logits=mean)
                 else:
@@ -256,21 +296,25 @@ class MAML:
                         grads_a = [tf.stop_gradient(grad) for grad in grads] 
                     '''    
                # initialize                
-                weights_a(tf.cast(inputa, tf.float32)) 
-                weights_b(tf.cast(inputa, tf.float32))
+                #weights_a(tf.cast(inputa, tf.float32)) 
+                #weights_b(tf.cast(inputa, tf.float32))
 
                 true_weights_a = [(weights.trainable_weights[i] - self.update_lr*grads_a[i]) for i in range(len(grads_a))]
                 #print(true_weights_a,weights_a.trainable_variables)
                 for i in range(len(true_weights_a)):
-                    tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
+                    #tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
+                    weights_a.trainable_weights[i] = true_weights_a[i]
 
                 # posterior b
                 if not self.classification:
                     mean , std = predict(weights_a,inputb)
                 else: 
                     mean = weights_a(tf.cast(inputb, tf.float32))
-                task_outputbs.append(mean)  #!!!maybe wrong
-                task_lossesb.append(self.loss_func(mean, tf.cast(labelb, tf.float32)))
+
+                deter(weights_output,weights_a)
+                task_outputb = weights_output(tf.cast(inputb, tf.float32)) 
+                task_outputbs.append(task_outputb)  #!!!maybe wrong
+                task_lossesb.append(self.loss_func(task_outputb, tf.cast(labelb, tf.float32))) 
                 if self.classification:
                     labels_distribution = tfd.Categorical(logits=mean)
                 else:
@@ -282,15 +326,17 @@ class MAML:
                 grads_b = tf.gradients(elbo_loss_b, weights_a.trainable_weights)                 
                 true_weights_b = [(weights_a.trainable_weights[i]  - self.update_lr*grads_b[i]) for i in range(len(grads_b))]               
                 for i in range(len(true_weights_b)):
-                    tf.assign(weights_b.trainable_variables[i] ,true_weights_b[i] )
+                    #tf.assign(weights_b.trainable_variables[i] ,true_weights_b[i] )
+                    weights_b.trainable_weights[i] = true_weights_b[i]
 
                 lossb = []
                 if (num_updates==1):
                     for i in range(len(weights_a.trainable_variables)):
-                        tf.assign(weights_a.trainable_variables[i] ,tf.stop_gradient(weights_a.trainable_variables[i]) )
+                        #tf.assign(weights_a.trainable_variables[i] ,tf.stop_gradient(weights_a.trainable_variables[i]) )
+                        weights_a.trainable_variables[i] = tf.stop_gradient(weights_a.trainable_variables[i])
                     for i in range(len(weights_a.trainable_variables)):
-                        tf.assign(weights_a.trainable_variables[i] ,tf.stop_gradient(weights_a.trainable_variables[i]) )
-
+                        #tf.assign(weights_a.trainable_variables[i] ,tf.stop_gradient(weights_a.trainable_variables[i]) )
+                        weights_b.trainable_variables[i] = tf.stop_gradient(weights_b.trainable_variables[i])
 
 
                 #weights_a_s = [tf.stop_gradient(weight) for weight in weights_a]
@@ -328,7 +374,8 @@ class MAML:
                                        
                     true_weights_a = [(weights_a.trainable_weights[i] - self.update_lr*grads_a[i]) for i in range(len(grads_a))]
                     for i in range(len(true_weights_a)):
-                        tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
+                        #tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
+                        weights_a.trainable_weights[i]=true_weights_a[i]
      #               print('set weight successfully')
                  
                     #output = tf.argmax(weights_a(tf.cast(inputb, tf.float32)), axis=1)
@@ -336,8 +383,11 @@ class MAML:
                         mean , std = predict(weights_a,inputb)
                     else: 
                         mean = weights_a(tf.cast(inputb, tf.float32))  
-                    task_outputbs.append(mean) #!!!maybe wrong
-                    task_lossesb.append(self.loss_func(mean, tf.cast(labelb, tf.float32)))
+                    deter(weights_output,weights_a)
+                    task_outputb = weights_output(tf.cast(inputb, tf.float32)) 
+                    task_outputbs.append(task_outputb)  #!!!maybe wrong
+                    #task_outputbs.append(mean) #!!!maybe wrong
+                    task_lossesb.append(self.loss_func(task_outputb, tf.cast(labelb, tf.float32)))
                     
                     # posterior b
                     #logits = weights_b(tf.cast(tf.concat([inputa,inputb],0), tf.float32))
@@ -363,17 +413,19 @@ class MAML:
                     grads_b = tf.gradients(elbo_loss_b, weights_b.trainable_weights)                 
                     true_weights_b = [(weights_b.trainable_weights[i]  - self.update_lr*grads_b[i]) for i in range(len(grads_b))]               
                     for i in range(len(true_weights_b)):
-                        tf.assign(weights_b.trainable_variables[i] ,true_weights_b[i] )
+                        #tf.assign(weights_b.trainable_variables[i] ,true_weights_b[i] )
+                        weights_b.trainable_weights[i]=true_weights_b[i]
 
                     lossb = []
 #                    weights_a = [tf.stop_gradient(weight) for weight in weights_a]
 #                    weights_b = [tf.stop_gradient(weight) for weight in weights_b]
                     if j == (num_updates-2):
                         for i in range(len(weights_a.trainable_variables)):
-                            tf.assign(weights_a.trainable_variables[i] ,tf.stop_gradient(weights_a.trainable_variables[i]) ) 
+                            #tf.assign(weights_a.trainable_variables[i] ,tf.stop_gradient(weights_a.trainable_variables[i]) ) 
+                            weights_a.trainable_variables[i] = tf.stop_gradient(weights_a.trainable_variables[i])
                         for i in range(len(weights_a.trainable_variables)):
-                            tf.assign(weights_a.trainable_variables[i] ,tf.stop_gradient(weights_a.trainable_variables[i]) )
-
+                            #tf.assign(weights_a.trainable_variables[i] ,tf.stop_gradient(weights_a.trainable_variables[i]) )
+                            weights_b.trainable_variables[i] = tf.stop_gradient(weights_b.trainable_variables[i])
 
                     for i, layer in enumerate(weights.layers):
                         try:
