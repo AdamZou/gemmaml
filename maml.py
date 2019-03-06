@@ -171,9 +171,11 @@ class MAML:
         self.labela = input_tensors['labela']
         self.labelb = input_tensors['labelb']
 
-        N_task = len(self.inputa)
-        self.weights_a, self.weights_b, self.weights_output = [],[],[]
-        task_number = range(N_task)
+        N_task = self.inputa.shape[0]
+        self.task_number=0
+        self.weights_a, self.weights_b, self.weights_output, self.weights_test = [],[],[],[]
+        #task_number = np.array(range(N_task))
+        print('N_task=',N_task)
 
         for i in range(N_task):
             weights_a = self.construct_weights()
@@ -471,12 +473,24 @@ class MAML:
             #out_dtype = [ tf.float32, tf.float32 ] 
             if self.classification:
                 out_dtype.extend([tf.float32, [tf.float32]*num_updates])
+
+            outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op = [None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task
+            for i in N_task:
+                elems=(self.inputa, self.inputb, self.labela, self.labelb, task_number)
+                if self.classification:
+                    outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op, accuraciesa, accuraciesb = task_metalearn(elems)             
+                else:
+                    outputas[i], outputbs[i], lossesa[i], lossesb[i], lossesa_op[i], lossesb_op[i]  = task_metalearn(elems)
+                
+
+            '''
             result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb, task_number), dtype=out_dtype, parallel_iterations=FLAGS.meta_batch_size)
           
             if self.classification:
                 outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op, accuraciesa, accuraciesb = result              
             else:
                 outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op  = result
+            '''
 
         ## Performance & Optimization
         print('num_updates=',num_updates,'\n')
