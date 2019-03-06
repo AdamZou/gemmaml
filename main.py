@@ -325,7 +325,7 @@ def main():
             metaval_input_tensors = {'inputa': inputa, 'inputb': inputb, 'labela': labela, 'labelb': labelb}
 
 
-
+    print(inputa.shape)
 
         #input_tensors = None
     #sess = tf.InteractiveSession()
@@ -379,8 +379,9 @@ def main():
     tf.global_variables_initializer().run()
     tf.train.start_queue_runners()
 
-#    print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
-#    print(sess.run(model.weights_test.layers[0].kernel_posterior.mean()))
+    print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
+    print(sess.run(model.weights_cp.layers[0].kernel_posterior.mean()))
+    print(sess.run(model.weights_test[0].layers[0].kernel_posterior.mean()))
 
     if FLAGS.resume or not FLAGS.train:
         print(FLAGS.logdir + '/' + exp_string)
@@ -398,8 +399,9 @@ def main():
     else:
         #print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
         test(model, saver, sess, exp_string, data_generator, test_num_updates) 
-        #print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
-        #print(sess.run(model.weights_test.layers[0].kernel_posterior.mean()))       
+        print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
+        print(sess.run(model.weights_cp.layers[0].kernel_posterior.mean()))
+        print(sess.run(model.weights_test[0].layers[0].kernel_posterior.mean()))       
 
 if __name__ == "__main__":
     main()
