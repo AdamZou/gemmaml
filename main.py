@@ -167,7 +167,7 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
 
     for _ in range(NUM_TEST_POINTS):
         if 'generate' not in dir(data_generator):
-            feed_dict = {}
+            #feed_dict = {}
             feed_dict = {model.meta_lr : 0.0}
         else:
             batch_x, batch_y, amp, phase = data_generator.generate(train=False)
@@ -183,12 +183,17 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
             labelb = batch_y[:,num_classes*FLAGS.update_batch_size:, :]
             #model.inputa = inputa, model.inputb= inputb,  model.labela= labela, model.labelb= labelb, model.meta_lr= 0.0
             #print(inputa.shape,inputa[0])
+
+            # !!!!!!  this is wrong. By this way we can not input the new 
+           
             model.inputa = inputa 
             model.inputb= inputb   
             model.labela= labela 
             model.labelb= labelb  
-            model.meta_lr= 0.0
-            feed_dict = {}
+            #model.meta_lr= 0.0
+           
+            feed_dict = {model.inputa_test: inputa }
+            #feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb, model.meta_lr: 0.0}
             #feed_dict = {model.inputa: np.float32(inputa), model.inputb: np.float32(inputb),  model.labela: np.float32(labela), model.labelb: np.float32(labelb), model.meta_lr: 0.0}
             #feed_dict = {model.inputa: tf.cast(inputa, tf.float32), model.inputb: tf.cast(inputb, tf.float32),  model.labela: tf.cast(labela, tf.float32), model.labelb: tf.cast(labelb, tf.float32), model.meta_lr: 0.0}
         if model.classification:
@@ -197,6 +202,27 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
         else:  # this is for sinusoid
             #_ = sess.run([model.pretrain_op], feed_dict)  #######?????
             result = sess.run([model.total_loss1] +  model.total_losses2, feed_dict)
+             
+            print('TEST:',_)
+            print('result=',result)
+            '''
+            print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
+        #print(sess.run(model.weights_cp.layers[0].kernel_posterior.mean()))
+            print(sess.run(model.weights_test[0].layers[0].kernel_posterior.mean()))
+        #print(sess.run(model.weights_test[0].trainable_weights))
+        #print(sess.run(model.weights_test[0].layers[1].kernel_posterior))   
+            print(model.inputa)
+            #print('model.inputa_check=',sess.run(model.inputa_check))
+           
+            print('output_weights_test')
+            print(sess.run(model.task_outputa))
+            print(sess.run(model.task_outputa))
+            print(sess.run(model.task_lossa))
+            print('output_weights')
+            print(sess.run(model.task_outputa_test))
+            print(sess.run(model.task_outputa_test))
+            '''
+            #result = sess.run(model.total_loss1,feed_dict)
             #print(sess.run(model.outputas))
             #print(sess.run(model.weights_output.layers[0].kernel_posterior.mean()))
         metaval_accuracies.append(result)
@@ -235,6 +261,7 @@ def main():
         else:
             test_num_updates = 10
 
+    FLAGS.meta_batch_size = 1     #### debug !!!!!!!!!!!
     if FLAGS.train == False:
         orig_meta_batch_size = FLAGS.meta_batch_size
         # always use meta batch size of 1 when testing.
@@ -287,11 +314,13 @@ def main():
         labelb = tf.slice(label_tensor, [0,num_classes*FLAGS.update_batch_size, 0], [-1,-1,-1])
         metaval_input_tensors = {'inputa': inputa, 'inputb': inputb, 'labela': labela, 'labelb': labelb}
     else:
-        #tf_data_load = False
-        tf_data_load = True
+        tf_data_load = False
+        #tf_data_load = True
         num_classes = data_generator.num_classes
+        np.random.seed(1)
+        random.seed(1)
         if FLAGS.train or FLAGS.datasource == 'sinusoid':
-            random.seed(5)
+            #random.seed(5)
             if 'generate' in dir(data_generator):
                 batch_x, batch_y, amp, phase = data_generator.generate()
 
@@ -306,8 +335,9 @@ def main():
                 inputb = batch_x[:, num_classes*FLAGS.update_batch_size:, :] # b used for testing
                 labelb = batch_y[:, num_classes*FLAGS.update_batch_size:, :]
                 input_tensors = {'inputa': inputa, 'inputb': inputb, 'labela': labela, 'labelb': labelb}
+         #       print('input_tensors=',inputa)
 
-        random.seed(6)
+        #random.seed(6)
         
         if 'generate' in dir(data_generator):
             batch_x, batch_y, amp, phase = data_generator.generate()
@@ -323,22 +353,24 @@ def main():
             inputb = batch_x[:, num_classes*FLAGS.update_batch_size:, :] # b used for testing
             labelb = batch_y[:, num_classes*FLAGS.update_batch_size:, :]
             metaval_input_tensors = {'inputa': inputa, 'inputb': inputb, 'labela': labela, 'labelb': labelb}
+          #  print('metaval_input_tensors=',inputa)
 
-
-    print(inputa.shape)
+  #  print(inputa.shape)
 
         #input_tensors = None
     #sess = tf.InteractiveSession()
     #tf.global_variables_initializer().run()
     model = MAML(dim_input, dim_output, test_num_updates=test_num_updates)
     if FLAGS.train or not tf_data_load or FLAGS.datasource == 'sinusoid':
+        print('input_tensors=',input_tensors)
         model.construct_model(input_tensors=input_tensors, prefix='metatrain_')
     if tf_data_load:
+        print('metaval_input_tensors=',metaval_input_tensors)
         model.construct_model(input_tensors=metaval_input_tensors, prefix='metaval_')
     model.summ_op = tf.summary.merge_all()
 
-    #saver = loader = tf.train.Saver(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES), max_to_keep=10)
-    saver = loader = tf.train.Saver(model.weights.trainable_variables, max_to_keep=2)
+    saver = loader = tf.train.Saver(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES), max_to_keep=5)
+    #saver = loader = tf.train.Saver(model.weights.trainable_variables, max_to_keep=2)
 
 
     sess = tf.InteractiveSession()
@@ -378,11 +410,22 @@ def main():
 
     tf.global_variables_initializer().run()
     tf.train.start_queue_runners()
-
-    print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
-    print(sess.run(model.weights_cp.layers[0].kernel_posterior.mean()))
-    print(sess.run(model.weights_test[0].layers[0].kernel_posterior.mean()))
-
+  
+    ''' 
+    print('test_1:') 
+    print(tf.cast(inputa[0], tf.float32))
+    print(sess.run(model.weights.layers[1].kernel_posterior.mean()))
+    #print(sess.run(model.weights_cp.layers[0].kernel_posterior.mean()))
+    print(sess.run(model.weights_test[0].layers[1].kernel_posterior.mean()))
+    print(model.inputa) 
+    print('model.inputa_check=',model.inputa_check)
+    print('output_weights_test')
+    print(sess.run(model.task_outputa))
+    print(sess.run(model.task_outputa))
+    print('output_weights')
+    print(sess.run(model.task_outputa_test))
+    print(sess.run(model.task_outputa_test))
+    '''
     if FLAGS.resume or not FLAGS.train:
         print(FLAGS.logdir + '/' + exp_string)
         model_file = tf.train.latest_checkpoint(FLAGS.logdir + '/' + exp_string)
@@ -393,16 +436,71 @@ def main():
             resume_itr = int(model_file[ind1+5:])
             print("Restoring model weights from " + model_file)
             saver.restore(sess, model_file)
+    
+    #print(inputa[0])
+    for i, layer in enumerate(model.weights_test[0].layers):
+        print(i)
+    	try: 
+            print('layer',i)
+            print(sess.run(layer.kernel_posterior.mean()))
+            print(sess.run(layer.kernel_posterior.variance()))
+            print(sess.run(layer.bias_posterior.mean()))
+            print(sess.run(layer.bias_posterior.variance()))
+        except AttributeError:
+            continue
 
+    inputa_1 = np.array([[[-4.99885625],
+        [-1.97667427],
+        [-3.53244109],
+        [-4.07661405],
+        [-3.13739789],
+        [-1.54439273],
+        [-1.03232526],
+        [ 0.38816734],
+        [-0.80805486],
+        [ 1.852195  ]]])
+    print(sess.run(model.weights_test[0](tf.cast(inputa_1[0], tf.float32))))
+    print(sess.run(model.weights_test[0](tf.cast(inputa_1[0], tf.float32))))
+    #print(sess.run(model.weights_test(inputa[0])))
+    '''
+    print('test_2:')
+    print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
+    #print(sess.run(model.weights_cp.layers[0].kernel_posterior.mean()))
+    print(sess.run(model.weights_test[0].layers[0].kernel_posterior.mean()))
+    #print(sess.run(model.weights_test(inputa[0])))
+    print(model.inputa)
+    print('model.inputa_check=',model.inputa_check)
+    print('output_weights_test')
+    print(sess.run(model.task_outputa))
+    print(sess.run(model.task_outputa))
+    print(sess.run(model.task_lossa))
+    print('output_weights')
+    print(sess.run(model.task_outputa_test))
+    print(sess.run(model.task_outputa_test)) 
+    '''
     if FLAGS.train:
         train(model, saver, sess, exp_string, data_generator, resume_itr)
     else:
+       
         #print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
         test(model, saver, sess, exp_string, data_generator, test_num_updates) 
+        '''
+        print('test_3:')
         print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
-        print(sess.run(model.weights_cp.layers[0].kernel_posterior.mean()))
-        print(sess.run(model.weights_test[0].layers[0].kernel_posterior.mean()))       
-
+        #print(sess.run(model.weights_cp.layers[0].kernel_posterior.mean()))
+        print(sess.run(model.weights_test[0].layers[0].kernel_posterior.mean())) 
+        #print(sess.run(model.weights_test[0].trainable_weights))
+        #print(sess.run(model.weights_test[0].layers[1].kernel_posterior))   
+        print('model.inputa=',model.inputa)  
+        print('model.inputa_check=',model.inputa_check) 
+        print('output_weights_test')
+        print(sess.run(model.task_outputa))
+        print(sess.run(model.task_outputa))
+        print(sess.run(model.task_lossa))
+        print('output_weights')
+        print(sess.run(model.task_outputa_test))
+        print(sess.run(model.task_outputa_test))
+        '''
 if __name__ == "__main__":
     main()
 

@@ -171,6 +171,11 @@ class MAML:
         self.labela = input_tensors['labela']
         self.labelb = input_tensors['labelb']
 
+        #self.inputa_test = self.inputa 
+        if FLAGS.train:
+            self.inputa_test = self.inputa
+        else: 
+            self.inputa_test = tf.placeholder(tf.float32)
         #print(self.inputa.shape)
         #print(self.labela.shape)
         #print(self.inputa[:,1,:])
@@ -296,21 +301,28 @@ class MAML:
                 #deter(weights_output,weights)
                 print('task_number=',self.task_number)
                 #self.weights_test[self.task_number-1].layers[0].kernel_posterior = tfd.Independent(tfd.Normal(loc=self.weights_cp.layers[0].kernel_posterior.mean(),scale=0.000000001))
-                self.weights_test[self.task_number-1].layers[0].kernel_posterior = tfd.Independent(tfd.Normal(loc=self.weights_test[self.task_number-1].layers[0].kernel_posterior.mean(),scale=0.000000001))               
-
-                for i, layer in enumerate(weights_output.layers):
+                #self.weights_test[self.task_number-1].layers[0].kernel_posterior = tfd.Independent(tfd.Normal(loc=self.weights.layers[0].kernel_posterior.mean(),scale=0.000000001))               
+                '''
+                for i, layer in enumerate(self.weights_test[self.task_number-1].layers):
                     try:
-                        layer.kernel_posterior = tfd.Independent(tfd.Normal(loc=weights.layers[i].kernel_posterior.mean(),scale=0.000000001))
+                        self.weights_test[self.task_number-1].layers[i].kernel_posterior = tfd.Independent(tfd.Normal(loc=self.weights.layers[i].kernel_posterior.mean(),scale=0.00000000000000000000001))
                         print('layer',i)
                     except AttributeError:
-                        continue
-                task_outputa = weights_output(tf.cast(inputa, tf.float32))  #!!! maybe wrong
+                        continue 
+                '''
+                
+                deter(self.weights_test[self.task_number-1],self.weights)
+                self.inputa_check = self.inputa_test
+                task_outputa = self.weights_test[self.task_number-1](tf.cast(self.inputa_test[0], tf.float32))  #!!! maybe wrong
+                self.task_outputa = task_outputa #debug!!!!
+                self.task_outputa_test = self.weights(tf.cast(self.inputa_test[0], tf.float32))
                 #init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
 		#sess=tf.InteractiveSession()
                 #tf.global_variables_initializer().run()
     		    #sess.run(init_op)
                 #print(sess.run(task_outputa))
                 task_lossa = self.loss_func(task_outputa, tf.cast(labela, tf.float32))
+                self.task_lossa = task_lossa # debug!!!!
                 
                 if self.classification:
                     labels_distribution = tfd.Categorical(logits=mean)
@@ -488,22 +500,52 @@ class MAML:
             #out_dtype = [ tf.float32, tf.float32 ] 
             if self.classification:
                 out_dtype.extend([tf.float32, [tf.float32]*num_updates])
-            result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb), dtype=out_dtype, parallel_iterations=FLAGS.meta_batch_size)
+            #result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb), dtype=out_dtype, parallel_iterations=FLAGS.meta_batch_size)
             #result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb), dtype=out_dtype)
+
+            outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op = [None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task
+            for i in range(N_task):
+                elems=(self.inputa[i], self.inputb[i], self.labela[i], self.labelb[i])
+                if self.classification:
+                    outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op, accuraciesa, accuraciesb = task_metalearn(elems)             
+                else:
+                    outputas[i], outputbs[i], lossesa[i], lossesb[i], lossesa_op[i], lossesb_op[i]  = task_metalearn(elems)
+
+            print(lossesb)
+            ''' 
+            lossesb = np.transpose(np.array(lossesb))
+            lossesb_op = np.transpose(np.array(lossesb_op)) 
+            outputbs = np.transpose(np.array(outputbs))
+           
+            lossesb = lossesb[0]
+            lossesb_op = lossesb_op[0]
+            outputbs = outputbs[0]
+            '''
+            #lossesb = [list(i) for i in zip(*lossesb)]
+            
+            print(lossesb[0])    
+            
+            '''
+            result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb, task_number), dtype=out_dtype, parallel_iterations=FLAGS.meta_batch_size)
+          
             if self.classification:
                 outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op, accuraciesa, accuraciesb = result              
             else:
                 outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op  = result
+            '''
 
         ## Performance & Optimization
         print('num_updates=',num_updates,'\n')
-        print('outshape=',lossesa.shape)
+        #print('outshape=',lossesa.shape)
         if 'train' in prefix:
             self.total_loss1 = total_loss1 = tf.reduce_sum(lossesa) / tf.to_float(FLAGS.meta_batch_size)
-            self.total_losses2 = total_losses2 = [tf.reduce_sum(lossesb[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]
+            #self.total_losses2 = total_losses2 = [tf.reduce_sum(lossesb[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]
+            #self.total_losses2 = total_losses2 = [lossesb[j] for j in range(num_updates)]
+            self.total_losses2 = total_losses2 = lossesb[0]
             self.total_loss1_op = total_loss1_op = tf.reduce_sum(lossesa_op) / tf.to_float(FLAGS.meta_batch_size)
-            self.total_losses2_op = total_losses2_op = [tf.reduce_sum(lossesb_op[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]
-           
+            #self.total_losses2_op = total_losses2_op = [tf.reduce_sum(lossesb_op[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]
+            #self.total_losses2_op = total_losses2_op = [lossesb_op[j] for j in range(num_updates)]
+            self.total_losses2_op = total_losses2_op = lossesb_op[0]
             # after the map_fn
             self.outputas, self.outputbs = outputas, outputbs
             
@@ -523,8 +565,8 @@ class MAML:
                 self.metatrain_op = optimizer.apply_gradients(gvs)
         else:
             self.metaval_total_loss1 = total_loss1 = tf.reduce_sum(lossesa) / tf.to_float(FLAGS.meta_batch_size)
-            self.metaval_total_losses2 = total_losses2 = [tf.reduce_sum(lossesb[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]
-          
+            #self.metaval_total_losses2 = total_losses2 = [tf.reduce_sum(lossesb[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]
+            self.metaval_total_losses2 = total_losses2 = lossesb[0]
             if self.classification:
                 self.metaval_total_accuracy1 = total_accuracy1 = tf.reduce_sum(accuraciesa) / tf.to_float(FLAGS.meta_batch_size)
                 self.metaval_total_accuracies2 = total_accuracies2 =[tf.reduce_sum(accuraciesb[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]
