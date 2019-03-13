@@ -202,9 +202,22 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
         else:  # this is for sinusoid
             #_ = sess.run([model.pretrain_op], feed_dict)  #######?????
             result = sess.run([model.total_loss1] +  model.total_losses2, feed_dict)
-             
+            grads_1 = sess.run(model.grads_1, feed_dict)
+            tw = sess.run(model.true_weights_a, feed_dict)
+            watw = sess.run(model.watw, feed_dict)
+            outb = sess.run(model.outb, feed_dict) 
+            lb = sess.run(model.lb, feed_dict)
+            wa = sess.run(model.wa.trainable_weights, feed_dict)
+            wo = sess.run(model.wo.trainable_weights, feed_dict)
             print('TEST:',_)
             print('result=',result)
+            #print('grads_1=',grads_1)
+            print('true_weights=',tw)
+            print('watw=',watw)
+            print('wa=',wa)
+            print('wo=',wo)
+            print('outb=',outb)
+            print('lb=',lb) 
             '''
             print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
         #print(sess.run(model.weights_cp.layers[0].kernel_posterior.mean()))
