@@ -283,7 +283,15 @@ class MAML:
                     for i, layer in enumerate(model_out.layers):
                         try:
                             layer.kernel_posterior = tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001))
-                            
+                            layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=model.layers[i].bias_posterior.mean()))
+                        except AttributeError:
+                            continue
+
+                def deter_weights(model_out,fast_weights):
+                    for i, layer in enumerate(model_out.layers):
+                        try:
+                            layer.kernel_posterior = tfd.Independent(tfd.Normal(loc=fast_weights[3*i],scale=tf.math.exp(fast_weights[3*i+1])))
+                            layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=fast_weights[3*i+2]))
                         except AttributeError:
                             continue
                 
@@ -334,19 +342,23 @@ class MAML:
                 elbo_loss_a = neg_log_likelihood + kl                
                 task_lossa_op = elbo_loss_a
                 grads_a = tf.gradients(elbo_loss_a, weights.trainable_weights) 
+                 
                 '''
                     if FLAGS.stop_grad:
                         grads_a = [tf.stop_gradient(grad) for grad in grads] 
                     '''    
-               # initialize                
+                # initialize                
                 #weights_a(tf.cast(inputa, tf.float32)) 
                 #weights_b(tf.cast(inputa, tf.float32))
 
-                true_weights_a = [(weights.trainable_weights[i] - self.update_lr*grads_a[i]) for i in range(len(grads_a))]
+                fast_weights_a = [(weights.trainable_weights[i] - self.update_lr*grads_a[i]) for i in range(len(grads_a))]
                 #print(true_weights_a,weights_a.trainable_variables)
+                '''
                 for i in range(len(true_weights_a)):
                     #tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
                     weights_a.trainable_weights[i] = true_weights_a[i]
+                '''
+                deter_weights(weights_a,fast_weights_a)
 
                 # posterior b
                 if not self.classification:
@@ -410,17 +422,20 @@ class MAML:
                     neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(labela, tf.float32)))
                     kl = sum(weights_a.losses) / tf.cast(tf.size(inputa), tf.float32)  #???               
     	            elbo_loss_a = neg_log_likelihood + kl           
-                    grads_a = tf.gradients(elbo_loss_a, weights_a.trainable_weights) 
-		    
+                    #grads_a = tf.gradients(elbo_loss_a, weights_a.trainable_weights) 
+		            grads_a = tf.gradients(elbo_loss_a, fast_weights_a)
                     #if FLAGS.stop_grad:
                     #    grads_a = [tf.stop_gradient(grad) for grad in grads] 
                                        
-                    true_weights_a = [(weights_a.trainable_weights[i] - self.update_lr*grads_a[i]) for i in range(len(grads_a))]
+                    fast_weights_a = [(fast_weights_a[i] - self.update_lr*grads_a[i]) for i in range(len(grads_a))]
+                    '''
                     for i in range(len(true_weights_a)):
                         #tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
                         weights_a.trainable_weights[i]=true_weights_a[i]
      #               print('set weight successfully')
-                 
+                    '''
+                    deter_weights(weights_a,fast_weights_a)
+
                     #output = tf.argmax(weights_a(tf.cast(inputb, tf.float32)), axis=1)
                     if not self.classification:
                         mean , std = predict(weights_a,inputb)
