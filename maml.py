@@ -150,58 +150,63 @@ class MAML:
 
     def construct_model(self, input_tensors=None, prefix='metatrain_'):
         # a: training data for inner gradient, b: test data for meta gradient
-        '''
-        if input_tensors is None:
-            print('fuck its none')
+        if FLAGS.datasource == 'sinusoid':
+        #if input_tensors is None:
+            #print('fuck its none')
             self.inputa = tf.placeholder(tf.float32)
             self.inputb = tf.placeholder(tf.float32)
             self.labela = tf.placeholder(tf.float32)
             self.labelb = tf.placeholder(tf.float32)
         else:
-            print('its not none fuck')
+            #print('its not none fuck')
             self.inputa = input_tensors['inputa']
             self.inputb = input_tensors['inputb']
             self.labela = input_tensors['labela']
             self.labelb = input_tensors['labelb']
-        '''
+        
+        self.inputa_init = input_tensors['inputa_init']
+
         self.sigma = FLAGS.sigma    
         self.num_repeat = FLAGS.num_repeat
+        '''
         self.inputa = input_tensors['inputa'] 
         self.inputb = input_tensors['inputa'] #  !!!!!debug
         self.labela = input_tensors['labela']
         self.labelb = input_tensors['labela'] #  !!!!!debug
-
+        
         #self.inputa_test = self.inputa 
         if FLAGS.train:
             self.inputa_test = self.inputa
         else: 
             self.inputa_test = tf.placeholder(tf.float32)
+        '''
         #print(self.inputa.shape)
         #print(self.labela.shape)
         #print(self.inputa[:,1,:])
         #print(self.inputa[1])
-
+        
         N_task = self.inputa.shape[0]
         self.task_number=0
         self.weights_a, self.weights_b, self.weights_output, self.weights_test = [],[],[],[]
         #task_number = np.array(range(N_task))
-	print('N_task=',N_task)
+	    print('N_task=',N_task)
 
         for i in range(N_task):
             weights_a = self.construct_weights()
-            weights_a((self.inputa[0]).astype('float32'))
+            weights_a((self.inputa_init[0]).astype('float32'))
             weights_b = self.construct_weights()
-            weights_b((self.inputa[0]).astype('float32'))
+            weights_b((self.inputa_init[0]).astype('float32'))
             weights_output = self.construct_weights()
-            weights_output((self.inputa[0]).astype('float32'))
+            weights_output((self.inputa_init[0]).astype('float32'))
             self.weights_a.append(weights_a)
             self.weights_b.append(weights_b)
             self.weights_output.append(weights_output)
 
+        
 	    weights_test = self.construct_weights()
-            weights_test((self.inputa[0]).astype('float32'))
+            weights_test((self.inputa_init[0]).astype('float32'))
             self.weights_test.append(weights_test)
-
+        
 
 	 #   print(self.labela)
         with tf.variable_scope('model', reuse=None) as training_scope:
@@ -219,9 +224,9 @@ class MAML:
                 #random.seed(7)
                 if FLAGS.datasource == 'sinusoid':
                     self.weights = weights = self.construct_weights()
-                    weights((self.inputa[0]).astype('float32'))
+                    weights((self.inputa_init[0]).astype('float32'))
                     self.weights_cp = weights_cp = self.construct_weights()
-                    weights_cp((self.inputa[0]).astype('float32'))
+                    weights_cp((self.inputa_init[0]).astype('float32'))
                     '''
                     self.weights_a = weights_a = self.construct_weights()
                     weights_a((self.inputa[0]).astype('float32'))
@@ -239,7 +244,6 @@ class MAML:
                     #weights_a(self.inputa[0])
                     #self.weights_b = weights_b = self.construct_weights()
                     #weights_b(self.inputa[0])
-
 
 
             # outputbs[i] and lossesb[i] is the output and loss after i+1 gradient updates
@@ -318,9 +322,9 @@ class MAML:
                     except AttributeError:
                         continue 
                 '''
-                 
+                
                 deter(self.weights_test[self.task_number-1],self.weights)
-                self.inputa_check = self.inputa_test
+                #self.inputa_check = self.inputa_test
                 task_outputa = self.weights_test[self.task_number-1](tf.cast(self.inputa_test[0], tf.float32))  #!!! maybe wrong
                 self.task_outputa = task_outputa #debug!!!!
                 self.task_outputa_test = self.weights(tf.cast(self.inputa_test[0], tf.float32))
@@ -353,7 +357,7 @@ class MAML:
                 #weights_a(tf.cast(inputa, tf.float32)) 
                 #weights_b(tf.cast(inputa, tf.float32))
                 print('lr=',self.update_lr) 
-                self.update_lr = 0.1
+                #self.update_lr = 0.1
                
                 fast_weights_a = [(weights.trainable_weights[i] - self.update_lr*grads_a[i]) for i in range(len(grads_a))]
                 #print(true_weights_a,weights_a.trainable_variables)

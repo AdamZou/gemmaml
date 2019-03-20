@@ -347,7 +347,8 @@ def main():
                 labela = batch_y[:, :num_classes*FLAGS.update_batch_size, :]
                 inputb = batch_x[:, num_classes*FLAGS.update_batch_size:, :] # b used for testing
                 labelb = batch_y[:, num_classes*FLAGS.update_batch_size:, :]
-                input_tensors = {'inputa': inputa, 'inputb': inputb, 'labela': labela, 'labelb': labelb}
+                #input_tensors = {'inputa': inputa, 'inputb': inputb, 'labela': labela, 'labelb': labelb}
+                input_tensors = {'inputa_init': inputa}
          #       print('input_tensors=',inputa)
 
         #random.seed(6)
