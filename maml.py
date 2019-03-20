@@ -167,15 +167,19 @@ class MAML:
         self.sigma = FLAGS.sigma    
         self.num_repeat = FLAGS.num_repeat
         self.inputa = input_tensors['inputa'] 
-        self.inputb = input_tensors['inputa'] #  !!!!!debug
+        self.inputb = input_tensors['inputb'] #  !!!!!debug
         self.labela = input_tensors['labela']
-        self.labelb = input_tensors['labela'] #  !!!!!debug
+        self.labelb = input_tensors['labelb'] #  !!!!!debug
 
         #self.inputa_test = self.inputa 
         if FLAGS.train:
             self.inputa_test = self.inputa
         else: 
             self.inputa_test = tf.placeholder(tf.float32)
+            self.inputb = tf.placeholder(tf.float32)
+            self.labela = tf.placeholder(tf.float32)
+            self.labelb = tf.placeholder(tf.float32)
+        
         #print(self.inputa.shape)
         #print(self.labela.shape)
         #print(self.inputa[:,1,:])
@@ -202,7 +206,7 @@ class MAML:
             weights_test((self.inputa[0]).astype('float32'))
             self.weights_test.append(weights_test)
 
-
+       
 	 #   print(self.labela)
         with tf.variable_scope('model', reuse=None) as training_scope:
             if 'weights' in dir(self):   
@@ -240,8 +244,8 @@ class MAML:
                     #self.weights_b = weights_b = self.construct_weights()
                     #weights_b(self.inputa[0])
 
-
-
+            inputa = self.inputa_test
+            
             # outputbs[i] and lossesb[i] is the output and loss after i+1 gradient updates
             lossesa, outputas, lossesb, outputbs = [], [], [], []
             accuraciesa, accuraciesb = [], []
@@ -419,7 +423,11 @@ class MAML:
                 #weights_b_s = [tf.stop_gradient(weight) for weight in weights_b]
                 for i, layer in enumerate(weights.layers):
                     try:
-                        q = layer.kernel_posterior
+                        #q = layer.kernel_posterior
+                        q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()))
+                        print('q=',q)
+                        print(weights_a.layers[i].kernel_posterior)
+                        print(weights_b.layers[i].kernel_posterior)
                         lossb.append(abs( weights_a.layers[i].kernel_posterior.cross_entropy(q) - weights_b.layers[i].kernel_posterior.cross_entropy(q)) )
                     except AttributeError:
                         continue
@@ -512,7 +520,8 @@ class MAML:
                     '''
                     for i, layer in enumerate(weights.layers):
                         try:
-                            q = layer.kernel_posterior
+                            #q = layer.kernel_posterior
+                            q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()))
                             lossb.append(abs( weights_a.layers[i].kernel_posterior.cross_entropy(q) - weights_b.layers[i].kernel_posterior.cross_entropy(q)) )
                         except AttributeError:
                             continue
