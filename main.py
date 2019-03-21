@@ -200,14 +200,15 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
             #print(inputa.shape,inputa[0])
 
             # !!!!!!  this is wrong. By this way we can not input the new 
-           
+            '''
             model.inputa = inputa 
             model.inputb= inputb   
             model.labela= labela 
             model.labelb= labelb  
+            '''
             #model.meta_lr= 0.0
            
-            feed_dict = {model.inputa_test: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb }
+            feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb }
             #feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb, model.meta_lr: 0.0}
             #feed_dict = {model.inputa: np.float32(inputa), model.inputb: np.float32(inputb),  model.labela: np.float32(labela), model.labelb: np.float32(labelb), model.meta_lr: 0.0}
             #feed_dict = {model.inputa: tf.cast(inputa, tf.float32), model.inputb: tf.cast(inputb, tf.float32),  model.labela: tf.cast(labela, tf.float32), model.labelb: tf.cast(labelb, tf.float32), model.meta_lr: 0.0}
@@ -238,6 +239,7 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
             print('inputb=',inputb)
             print('labelb=',labelb)
             print('outb=',outb)
+            print('outb_last=',sess.run(model.outb_last, feed_dict))
             print('lb=',lb) 
             '''
             print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
@@ -461,6 +463,31 @@ def main():
     print(sess.run(model.task_outputa_test))
     print(sess.run(model.task_outputa_test))
     '''
+
+    for i, layer in enumerate(model.weights_test[0].layers):
+        print(i)
+        try:
+            print('layer',i)
+            print(sess.run(layer.kernel_posterior.mean()))
+            print(sess.run(layer.kernel_posterior.variance()))
+            print(sess.run(layer.bias_posterior.mean()))
+            print(sess.run(layer.bias_posterior.variance()))
+        except AttributeError:
+            continue
+
+    inputa_1 = np.array([[[-4.99885625],
+        [-1.97667427],
+        [-3.53244109],
+        [-4.07661405],
+        [-3.13739789],
+        [-1.54439273],
+        [-1.03232526],
+        [ 0.38816734],
+        [-0.80805486],
+        [ 1.852195  ]]])
+    print(sess.run(model.weights_test[0](tf.cast(inputa_1[0], tf.float32))))
+    print(sess.run(model.weights_test[0](tf.cast(inputa_1[0], tf.float32))))
+
     if FLAGS.resume or not FLAGS.train:
         print(FLAGS.logdir + '/' + exp_string)
         model_file = tf.train.latest_checkpoint(FLAGS.logdir + '/' + exp_string)

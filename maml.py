@@ -157,14 +157,15 @@ class MAML:
             self.inputb = tf.placeholder(tf.float32)
             self.labela = tf.placeholder(tf.float32)
             self.labelb = tf.placeholder(tf.float32)
+            self.inputa_init = input_tensors['inputa_init']
         else:
             #print('its not none fuck')
             self.inputa = input_tensors['inputa']
             self.inputb = input_tensors['inputb']
             self.labela = input_tensors['labela']
-            self.labelb = input_tensors['labelb']
+            self.labelb = input_tensors['labelb'] 
+            self.inputa_init = self.inputa
         
-        self.inputa_init = input_tensors['inputa_init']
 
         self.sigma = FLAGS.sigma    
         self.num_repeat = FLAGS.num_repeat
@@ -532,7 +533,7 @@ class MAML:
                             continue
                     task_lossesb_op.append(sum(lossb))
                 
-              
+                self.outb_last=task_outputb    #!!!!!!!!!
                 task_output = [task_outputa, task_outputbs, task_lossa, task_lossesb, task_lossa_op, task_lossesb_op ]  
                 
                 if self.classification:
