@@ -53,7 +53,7 @@ flags.DEFINE_integer('meta_batch_size', 2, 'number of tasks sampled per meta-upd
 flags.DEFINE_float('meta_lr', 0.001, 'the base learning rate of the generator')
 flags.DEFINE_integer('update_batch_size', 10, 'number of examples used for inner gradient update (K for K-shot learning).')
 flags.DEFINE_float('update_lr', 1e-3, 'step size alpha for inner gradient update.') # 0.1 for omniglot
-flags.DEFINE_integer('num_updates', 10, 'number of inner gradient updates during training.')
+flags.DEFINE_integer('num_updates', 1, 'number of inner gradient updates during training.')
 
 
 ## Model options
