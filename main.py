@@ -123,6 +123,8 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
         
 
         result = sess.run(input_tensors, feed_dict)
+        result_debug = sess.run([model.total_loss1] +  model.total_losses2, feed_dict)  #!!!!!
+        print('result_debug=',result_debug)   
         #print('result=',result,'\n')
         #print('result=',result[0],'\n')
         #print('result=',result[1],'\n')
@@ -141,21 +143,30 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
                 print_str = 'Iteration ' + str(itr - FLAGS.pretrain_iterations)
             print_str += ': ' + str(np.mean(prelosses)) + ', ' + str(np.mean(postlosses))
             print(print_str)
-            outb = sess.run(model.outb, feed_dict)
-            lb = sess.run(model.lb, feed_dict)
-            wa = sess.run(model.wa.trainable_weights, feed_dict)
-            wo = sess.run(model.wo.trainable_weights, feed_dict)
-            print('wa=',wa)
-            print('wo=',wo) 
+            
+            #wa = sess.run(model.wa.trainable_weights, feed_dict)
+            #wo = sess.run(model.wo.trainable_weights, feed_dict)
+            #rint('wa=',wa)
+            #print('wo=',wo) 
+            #outputas, outputbs, lossesa, lossesb
             print('inputa=',inputa)
-            print('labela=',labela)
-            print('taskoutputa=',sess.run(model.task_outputa, feed_dict))
-            print('taskoutputa_test=',sess.run(model.task_outputa_test, feed_dict))
+            print('labela=',labela)           
+            print('outputas=',sess.run(model.outputas, feed_dict))            
+            print('lossesa=',sess.run(model.lossesa, feed_dict))
+            
             print('inputb=',inputb)
             print('labelb=',labelb)
+            print('outputbs=',sess.run(model.outputbs, feed_dict))
+            print('lossesb=',sess.run(model.lossesb, feed_dict))
+            '''
+            outb = sess.run(model.outb, feed_dict)
+            lb = sess.run(model.lb, feed_dict)
+            print('taskoutputa=',sess.run(model.task_outputa, feed_dict))
+            print('taskoutputa_test=',sess.run(model.task_outputa_test, feed_dict))
             print('outb=',outb)
             print('outb_last=',sess.run(model.outb_last, feed_dict))
             print('lb=',lb)
+            '''
             prelosses, postlosses = [], []
 
         if (itr!=0) and itr % SAVE_INTERVAL == 0:

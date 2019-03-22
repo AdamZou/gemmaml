@@ -589,11 +589,15 @@ class MAML:
             for i in range(N_task):
                 elems=(self.inputa[i], self.inputb[i], self.labela[i], self.labelb[i])
                 if self.classification:
-                    outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op, accuraciesa, accuraciesb = task_metalearn(elems)             
+                    outputas[i], outputbs[i], lossesa[i], lossesb[i], lossesa_op[i], lossesb_op[i], accuraciesa[i], accuraciesb[i] = task_metalearn(elems)             
                 else:
                     outputas[i], outputbs[i], lossesa[i], lossesb[i], lossesa_op[i], lossesb_op[i]  = task_metalearn(elems)
 
-            print(lossesb)
+            self.outputas = outputas
+            self.outputbs = outputbs
+            self.lossesa = lossesa
+            self.lossesb = lossesb
+            #print(lossesb)
             ''' 
             lossesb = np.transpose(np.array(lossesb))
             lossesb_op = np.transpose(np.array(lossesb_op)) 
@@ -605,7 +609,7 @@ class MAML:
             '''
             #lossesb = [list(i) for i in zip(*lossesb)]
             
-            print(lossesb[0])    
+            #print(lossesb[0])    
             
             '''
             result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb, task_number), dtype=out_dtype, parallel_iterations=FLAGS.meta_batch_size)
