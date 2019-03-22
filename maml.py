@@ -625,15 +625,17 @@ class MAML:
         #print('outshape=',lossesa.shape)
         if 'train' in prefix:
             self.total_loss1 = total_loss1 = tf.reduce_sum(lossesa) / tf.to_float(FLAGS.meta_batch_size)
-            #self.total_losses2 = total_losses2 = [tf.reduce_sum(lossesb[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]
+            lossesb_trans = tf.transpose(lossesb)
+            self.total_losses2 = total_losses2 = [tf.reduce_sum(lossesb_trans[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]
             #self.total_losses2 = total_losses2 = [lossesb[j] for j in range(num_updates)]
-            self.total_losses2 = total_losses2 = lossesb[0]
+            #self.total_losses2 = total_losses2 = lossesb[0]
             self.total_loss1_op = total_loss1_op = tf.reduce_sum(lossesa_op) / tf.to_float(FLAGS.meta_batch_size)
-            #self.total_losses2_op = total_losses2_op = [tf.reduce_sum(lossesb_op[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]
+            lossesb_op_trans = tf.transpose(lossesb_op)
+            self.total_losses2_op = total_losses2_op = [tf.reduce_sum(lossesb_op_trans[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]
             #self.total_losses2_op = total_losses2_op = [lossesb_op[j] for j in range(num_updates)]
-            self.total_losses2_op = total_losses2_op = lossesb_op[0]
+            #self.total_losses2_op = total_losses2_op = lossesb_op[0]
             # after the map_fn
-            self.outputas, self.outputbs = outputas, outputbs
+            #self.outputas, self.outputbs = outputas, outputbs
             
             if self.classification:
                 self.total_accuracy1 = total_accuracy1 = tf.reduce_sum(accuraciesa) / tf.to_float(FLAGS.meta_batch_size)
