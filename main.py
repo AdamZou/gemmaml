@@ -49,11 +49,12 @@ flags.DEFINE_float('sigma', 1.0, 'scale of label distribution')
 flags.DEFINE_integer('num_repeat', 1, 'number of repeated runnings for each prediction')
 flags.DEFINE_integer('pretrain_iterations', 0, 'number of pre-training iterations.')
 flags.DEFINE_integer('metatrain_iterations', 15000, 'number of metatraining iterations.') # 15k for omniglot, 50k for sinusoid
-flags.DEFINE_integer('meta_batch_size', 25, 'number of tasks sampled per meta-update')
+flags.DEFINE_integer('meta_batch_size', 2, 'number of tasks sampled per meta-update')
 flags.DEFINE_float('meta_lr', 0.001, 'the base learning rate of the generator')
 flags.DEFINE_integer('update_batch_size', 10, 'number of examples used for inner gradient update (K for K-shot learning).')
 flags.DEFINE_float('update_lr', 1e-3, 'step size alpha for inner gradient update.') # 0.1 for omniglot
 flags.DEFINE_integer('num_updates', 10, 'number of inner gradient updates during training.')
+
 
 ## Model options
 flags.DEFINE_string('norm', 'batch_norm', 'batch_norm, layer_norm, or None')
@@ -76,7 +77,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
     SUMMARY_INTERVAL = 100
     SAVE_INTERVAL = 1000
     if FLAGS.datasource == 'sinusoid':
-        PRINT_INTERVAL = 1000
+        PRINT_INTERVAL = 100
         TEST_PRINT_INTERVAL = PRINT_INTERVAL*5
     else:
         PRINT_INTERVAL = 100
@@ -105,10 +106,12 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
             labela = batch_y[:, :num_classes*FLAGS.update_batch_size, :]
             inputb = batch_x[:, num_classes*FLAGS.update_batch_size:, :] # b used for testing
             labelb = batch_y[:, num_classes*FLAGS.update_batch_size:, :]
+            #print('inputa.shape=',inputa.shape,inputa)
+            #print('inputb.shape=',inputb.shape,inputb)
             feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb}
 
         if itr < FLAGS.pretrain_iterations:    
-	        input_tensors = [model.pretrain_op]  
+	    input_tensors = [model.pretrain_op]  
         else:
 ##### metatrain_op
             input_tensors = [model.metatrain_op]
@@ -138,6 +141,21 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
                 print_str = 'Iteration ' + str(itr - FLAGS.pretrain_iterations)
             print_str += ': ' + str(np.mean(prelosses)) + ', ' + str(np.mean(postlosses))
             print(print_str)
+            outb = sess.run(model.outb, feed_dict)
+            lb = sess.run(model.lb, feed_dict)
+            wa = sess.run(model.wa.trainable_weights, feed_dict)
+            wo = sess.run(model.wo.trainable_weights, feed_dict)
+            print('wa=',wa)
+            print('wo=',wo) 
+            print('inputa=',inputa)
+            print('labela=',labela)
+            print('taskoutputa=',sess.run(model.task_outputa, feed_dict))
+            print('taskoutputa_test=',sess.run(model.task_outputa_test, feed_dict))
+            print('inputb=',inputb)
+            print('labelb=',labelb)
+            print('outb=',outb)
+            print('outb_last=',sess.run(model.outb_last, feed_dict))
+            print('lb=',lb)
             prelosses, postlosses = [], []
 
         if (itr!=0) and itr % SAVE_INTERVAL == 0:
@@ -200,15 +218,16 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
             #print(inputa.shape,inputa[0])
 
             # !!!!!!  this is wrong. By this way we can not input the new 
-           
+            '''
             model.inputa = inputa 
             model.inputb= inputb   
             model.labela= labela 
             model.labelb= labelb  
+            '''
             #model.meta_lr= 0.0
            
-            feed_dict = {model.inputa_test: inputa }
-            #feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb, model.meta_lr: 0.0}
+            #feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb }
+            feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb, model.meta_lr: 0.0}
             #feed_dict = {model.inputa: np.float32(inputa), model.inputb: np.float32(inputb),  model.labela: np.float32(labela), model.labelb: np.float32(labelb), model.meta_lr: 0.0}
             #feed_dict = {model.inputa: tf.cast(inputa, tf.float32), model.inputb: tf.cast(inputb, tf.float32),  model.labela: tf.cast(labela, tf.float32), model.labelb: tf.cast(labelb, tf.float32), model.meta_lr: 0.0}
         if model.classification:
@@ -218,8 +237,8 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
             #_ = sess.run([model.pretrain_op], feed_dict)  #######?????
             result = sess.run([model.total_loss1] +  model.total_losses2, feed_dict)
             grads_1 = sess.run(model.grads_1, feed_dict)
-            tw = sess.run(model.true_weights_a, feed_dict)
-            watw = sess.run(model.watw, feed_dict)
+            #tw = sess.run(model.true_weights_a, feed_dict)
+            #watw = sess.run(model.watw, feed_dict)
             outb = sess.run(model.outb, feed_dict) 
             lb = sess.run(model.lb, feed_dict)
             wa = sess.run(model.wa.trainable_weights, feed_dict)
@@ -227,11 +246,18 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
             print('TEST:',_)
             print('result=',result)
             #print('grads_1=',grads_1)
-            print('true_weights=',tw)
-            print('watw=',watw)
-            print('wa=',wa)
-            print('wo=',wo)
+            #print('true_weights=',tw)
+            #print('watw=',watw)
+            #print('wa=',wa)
+            #print('wo=',wo)
+            print('inputa=',inputa)
+            print('labela=',labela)
+            print('taskoutputa=',sess.run(model.task_outputa, feed_dict))
+            print('taskoutputa_test=',sess.run(model.task_outputa_test, feed_dict))
+            print('inputb=',inputb)
+            print('labelb=',labelb)
             print('outb=',outb)
+            print('outb_last=',sess.run(model.outb_last, feed_dict))
             print('lb=',lb) 
             '''
             print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
@@ -277,7 +303,8 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
 def main():
     if FLAGS.datasource == 'sinusoid':
         if FLAGS.train:
-            test_num_updates = 5
+            #test_num_updates = 5
+            test_num_updates = 2
         else:
             test_num_updates = 10
     else:
@@ -289,14 +316,15 @@ def main():
         else:
             test_num_updates = 10
 
-    FLAGS.meta_batch_size = 1     #### debug !!!!!!!!!!!
+    #FLAGS.meta_batch_size = 1     #### debug !!!!!!!!!!!
     if FLAGS.train == False:
         orig_meta_batch_size = FLAGS.meta_batch_size
         # always use meta batch size of 1 when testing.
         FLAGS.meta_batch_size = 1
 
     if FLAGS.datasource == 'sinusoid':
-        data_generator = DataGenerator(FLAGS.update_batch_size, FLAGS.meta_batch_size)
+        data_generator = DataGenerator(2*FLAGS.update_batch_size, FLAGS.meta_batch_size)     #2 for train and test data  a,b
+
     else:
         if FLAGS.metatrain_iterations == 0 and FLAGS.datasource == 'miniimagenet':
             assert FLAGS.meta_batch_size == 1
@@ -455,6 +483,31 @@ def main():
     print(sess.run(model.task_outputa_test))
     print(sess.run(model.task_outputa_test))
     '''
+
+    for i, layer in enumerate(model.weights_test[0].layers):
+        print(i)
+        try:
+            print('layer',i)
+            print(sess.run(layer.kernel_posterior.mean()))
+            print(sess.run(layer.kernel_posterior.variance()))
+            print(sess.run(layer.bias_posterior.mean()))
+            print(sess.run(layer.bias_posterior.variance()))
+        except AttributeError:
+            continue
+
+    inputa_1 = np.array([[[-4.99885625],
+        [-1.97667427],
+        [-3.53244109],
+        [-4.07661405],
+        [-3.13739789],
+        [-1.54439273],
+        [-1.03232526],
+        [ 0.38816734],
+        [-0.80805486],
+        [ 1.852195  ]]])
+    print(sess.run(model.weights_test[0](tf.cast(inputa_1[0], tf.float32))))
+    print(sess.run(model.weights_test[0](tf.cast(inputa_1[0], tf.float32))))
+
     if FLAGS.resume or not FLAGS.train:
         print(FLAGS.logdir + '/' + exp_string)
         model_file = tf.train.latest_checkpoint(FLAGS.logdir + '/' + exp_string)

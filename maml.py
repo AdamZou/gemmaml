@@ -140,17 +140,19 @@ class MAML:
         #model = tf.keras.Sequential([tfp.layers.DenseFlipout(self.dim_hidden[0],input_shape=(self.dim_input,) ,activation=tf.nn.relu,kernel_initializer='random_uniform')])
         for i in range(len(self.dim_hidden)):
             model.add(tfp.layers.DenseFlipout(self.dim_hidden[i] ,activation=tf.nn.relu,
-                kernel_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(loc_initializer=tf.random_uniform_initializer(minval=-5,maxval=5),
-    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-5,maxval=5)),
-                                 bias_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(is_singular=True,loc_initializer=tf.random_uniform_initializer(minval=-5,maxval=5),
-    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-5,maxval=5))))
-            model.add(tf.keras.layers.Dense(self.dim_hidden[i]))
-            model.add(tf.keras.layers.BatchNormalization())
+
+                kernel_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(loc_initializer=tf.random_uniform_initializer(minval=-0.1,maxval=0.1),
+    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-3.1,maxval=-3)),
+                                 bias_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(is_singular=True,loc_initializer=tf.random_uniform_initializer(minval=-0.1,maxval=0.1),
+    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-3.1,maxval=-3))))
+            #model.add(tf.keras.layers.Dense(self.dim_hidden[i]))
+            #model.add(tf.keras.layers.BatchNormalization())
+
         model.add(tfp.layers.DenseFlipout(self.dim_output,
-            kernel_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(loc_initializer=tf.random_uniform_initializer(minval=-5,maxval=5),
-    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-5,maxval=5)),
-                                 bias_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(is_singular=True,loc_initializer=tf.random_uniform_initializer(minval=-5,maxval=5),
-    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-5,maxval=5))))
+            kernel_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(loc_initializer=tf.random_uniform_initializer(minval=-0.1,maxval=0.1),
+    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-3.1,maxval=-3)),
+                                 bias_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(is_singular=True,loc_initializer=tf.random_uniform_initializer(minval=-0.1,maxval=0.1),
+    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-3.1,maxval=-3))))
         
      
         return model
@@ -161,44 +163,55 @@ class MAML:
         if FLAGS.datasource == 'sinusoid':
         #if input_tensors is None:
             #print('fuck its none')
-            self.inputa = tf.placeholder(tf.float32)
-            self.inputb = tf.placeholder(tf.float32)
-            self.labela = tf.placeholder(tf.float32)
-            self.labelb = tf.placeholder(tf.float32)
+            input_shape = (FLAGS.meta_batch_size,FLAGS.update_batch_size,self.dim_input)
+            #input_b_shape = (FLAGS.meta_batch_size,0,self.dim_input)
+            output_shape = (FLAGS.meta_batch_size,FLAGS.update_batch_size,self.dim_output)
+            #output_b_shape = (FLAGS.meta_batch_size,0,self.dim_output)
+            self.inputa = tf.placeholder(tf.float32,shape=input_shape)
+            self.inputb = tf.placeholder(tf.float32,shape=input_shape)
+            self.labela = tf.placeholder(tf.float32,shape=output_shape)
+            self.labelb = tf.placeholder(tf.float32,shape=output_shape)
+            self.inputa_init = input_tensors['inputa_init']
         else:
             #print('its not none fuck')
             self.inputa = input_tensors['inputa']
             self.inputb = input_tensors['inputb']
             self.labela = input_tensors['labela']
-            self.labelb = input_tensors['labelb']
+            self.labelb = input_tensors['labelb'] 
+            self.inputa_init = self.inputa
         
-        self.inputa_init = input_tensors['inputa_init']
 
         self.sigma = FLAGS.sigma    
         self.num_repeat = FLAGS.num_repeat
         '''
         self.inputa = input_tensors['inputa'] 
-        self.inputb = input_tensors['inputa'] #  !!!!!debug
+        self.inputb = input_tensors['inputb'] #  !!!!!debug
         self.labela = input_tensors['labela']
-        self.labelb = input_tensors['labela'] #  !!!!!debug
+        self.labelb = input_tensors['labelb'] #  !!!!!debug
+
         
         #self.inputa_test = self.inputa 
         if FLAGS.train:
             self.inputa_test = self.inputa
         else: 
             self.inputa_test = tf.placeholder(tf.float32)
+            self.inputb = tf.placeholder(tf.float32)
+            self.labela = tf.placeholder(tf.float32)
+            self.labelb = tf.placeholder(tf.float32)
+        
         '''
         #print(self.inputa.shape)
         #print(self.labela.shape)
         #print(self.inputa[:,1,:])
         #print(self.inputa[1])
         
-        N_task = self.inputa.shape[0]
+        #N_task = self.inputa.shape[0]
         self.task_number=0
         self.weights_a, self.weights_b, self.weights_output, self.weights_test = [],[],[],[]
         #task_number = np.array(range(N_task))
-	    print('N_task=',N_task)
-
+	#print('N_task=',N_task)
+        N_task=FLAGS.meta_batch_size
+        print('N_task=',N_task) 
         for i in range(N_task):
             weights_a = self.construct_weights()
             weights_a((self.inputa_init[0]).astype('float32'))
@@ -214,8 +227,8 @@ class MAML:
 	    weights_test = self.construct_weights()
             weights_test((self.inputa_init[0]).astype('float32'))
             self.weights_test.append(weights_test)
-        
 
+       
 	 #   print(self.labela)
         with tf.variable_scope('model', reuse=None) as training_scope:
             if 'weights' in dir(self):   
@@ -285,7 +298,7 @@ class MAML:
                     logits=[]
                     #print('num_repeat=',self.num_repeat)
                     for i in range(self.num_repeat):
-                        logits.append(NN(tf.cast(inputs, tf.float32)))
+                        logits.append(NN(inputs))
                     mean = tf.reduce_mean(logits,0)
                     std = reduce_std(logits,0)
                     #print(mean,std)
@@ -302,11 +315,20 @@ class MAML:
                 def output_weights(model_out,fast_weights):
                     j=0
                     for i, layer in enumerate(model_out.layers):
+                        print(i,layer)
+                        print('j=',j)
                         try:
-                            layer.kernel_posterior = tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])))        
+                            print(layer.kernel_posterior)
+                            layer.kernel_posterior = tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])))
                             layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=fast_weights[j+2]))
                             j+=3
+                            print('tfp')
+
                         except AttributeError:
+                            layer.gamma = fast_weights[j]
+                            layer.beta = fast_weights[j+1]
+                            j+=2
+                            print('norm')
                             continue
                 
                 if FLAGS.datasource == 'omniglot': 
@@ -335,9 +357,9 @@ class MAML:
                 
                 deter(self.weights_test[self.task_number-1],self.weights)
                 #self.inputa_check = self.inputa_test
-                task_outputa = self.weights_test[self.task_number-1](tf.cast(self.inputa_test[0], tf.float32))  #!!! maybe wrong
+                task_outputa = self.weights_test[self.task_number-1](tf.cast(self.inputa[0], tf.float32))  #!!! maybe wrong
                 self.task_outputa = task_outputa #debug!!!!
-                self.task_outputa_test = self.weights(tf.cast(self.inputa_test[0], tf.float32))
+                self.task_outputa_test = self.weights(tf.cast(self.inputa[0], tf.float32))
                 #init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
 		#sess=tf.InteractiveSession()
                 #tf.global_variables_initializer().run()
@@ -370,7 +392,7 @@ class MAML:
                 #self.update_lr = 0.1
                
                 fast_weights_a = [(weights.trainable_weights[i] - self.update_lr*grads_a[i]) for i in range(len(grads_a))]
-                #print(true_weights_a,weights_a.trainable_variables)
+                print(weights.trainable_variables)
                 '''
                 for i in range(len(true_weights_a)):
                     #tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
@@ -433,12 +455,17 @@ class MAML:
                 #weights_b_s = [tf.stop_gradient(weight) for weight in weights_b]
                 for i, layer in enumerate(weights.layers):
                     try:
-                        q = layer.kernel_posterior
+                        #q = layer.kernel_posterior
+                        q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()))
+                        print('q=',q)
+                        print(weights_a.layers[i].kernel_posterior)
+                        print(weights_b.layers[i].kernel_posterior)
                         lossb.append(abs( weights_a.layers[i].kernel_posterior.cross_entropy(q) - weights_b.layers[i].kernel_posterior.cross_entropy(q)) )
                     except AttributeError:
                         continue
                 task_lossesb_op.append(sum(lossb))
-
+                
+                print('num_updates=',num_updates) #!!!!!!!!
                 # the rest gradient steps
                 for j in range(num_updates-1): 
                     # posterior a 
@@ -526,13 +553,14 @@ class MAML:
                     '''
                     for i, layer in enumerate(weights.layers):
                         try:
-                            q = layer.kernel_posterior
+                            #q = layer.kernel_posterior
+                            q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()))
                             lossb.append(abs( weights_a.layers[i].kernel_posterior.cross_entropy(q) - weights_b.layers[i].kernel_posterior.cross_entropy(q)) )
                         except AttributeError:
                             continue
                     task_lossesb_op.append(sum(lossb))
                 
-              
+                self.outb_last=task_outputb    #!!!!!!!!!
                 task_output = [task_outputa, task_outputbs, task_lossa, task_lossesb, task_lossa_op, task_lossesb_op ]  
                 
                 if self.classification:
