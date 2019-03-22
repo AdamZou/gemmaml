@@ -75,7 +75,7 @@ FLAGS = flags.FLAGS
 
 
 class MAML:
-    def __init__(self, dim_input=1, dim_output=1, test_num_updates=5):
+    def __init__(self, dim_input=1, dim_output=1, test_num_updates=1):
         """ must call construct_model() after initializing MAML! """
         self.dim_input = dim_input
         self.dim_output = dim_output
@@ -140,17 +140,17 @@ class MAML:
         #model = tf.keras.Sequential([tfp.layers.DenseFlipout(self.dim_hidden[0],input_shape=(self.dim_input,) ,activation=tf.nn.relu,kernel_initializer='random_uniform')])
         for i in range(len(self.dim_hidden)):
             model.add(tfp.layers.DenseFlipout(self.dim_hidden[i] ,activation=tf.nn.relu,
-                kernel_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(loc_initializer=tf.random_uniform_initializer(minval=-5,maxval=5),
-    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-5,maxval=5)),
-                                 bias_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(is_singular=True,loc_initializer=tf.random_uniform_initializer(minval=-5,maxval=5),
-    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-5,maxval=5))))
+                kernel_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(loc_initializer=tf.random_uniform_initializer(minval=-0.1,maxval=0.1),
+    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-3.1,maxval=-3)),
+                                 bias_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(is_singular=True,loc_initializer=tf.random_uniform_initializer(minval=-0.1,maxval=0.1),
+    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-3.1,maxval=-3))))
             #model.add(tf.keras.layers.Dense(self.dim_hidden[i]))
             #model.add(tf.keras.layers.BatchNormalization())
         model.add(tfp.layers.DenseFlipout(self.dim_output,
-            kernel_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(loc_initializer=tf.random_uniform_initializer(minval=-5,maxval=5),
-    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-5,maxval=5)),
-                                 bias_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(is_singular=True,loc_initializer=tf.random_uniform_initializer(minval=-5,maxval=5),
-    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-5,maxval=5))))
+            kernel_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(loc_initializer=tf.random_uniform_initializer(minval=-0.1,maxval=0.1),
+    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-3.1,maxval=-3)),
+                                 bias_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(is_singular=True,loc_initializer=tf.random_uniform_initializer(minval=-0.1,maxval=0.1),
+    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-3.1,maxval=-3))))
         
      
         return model
@@ -161,10 +161,14 @@ class MAML:
         if FLAGS.datasource == 'sinusoid':
         #if input_tensors is None:
             #print('fuck its none')
-            self.inputa = tf.placeholder(tf.float32)
-            self.inputb = tf.placeholder(tf.float32)
-            self.labela = tf.placeholder(tf.float32)
-            self.labelb = tf.placeholder(tf.float32)
+            input_shape = (FLAGS.meta_batch_size,FLAGS.update_batch_size,self.dim_input)
+            #input_b_shape = (FLAGS.meta_batch_size,0,self.dim_input)
+            output_shape = (FLAGS.meta_batch_size,FLAGS.update_batch_size,self.dim_output)
+            #output_b_shape = (FLAGS.meta_batch_size,0,self.dim_output)
+            self.inputa = tf.placeholder(tf.float32,shape=input_shape)
+            self.inputb = tf.placeholder(tf.float32,shape=input_shape)
+            self.labela = tf.placeholder(tf.float32,shape=output_shape)
+            self.labelb = tf.placeholder(tf.float32,shape=output_shape)
             self.inputa_init = input_tensors['inputa_init']
         else:
             #print('its not none fuck')
@@ -205,6 +209,7 @@ class MAML:
         #task_number = np.array(range(N_task))
 	#print('N_task=',N_task)
         N_task=FLAGS.meta_batch_size
+        print('N_task=',N_task) 
         for i in range(N_task):
             weights_a = self.construct_weights()
             weights_a((self.inputa_init[0]).astype('float32'))
@@ -291,7 +296,7 @@ class MAML:
                     logits=[]
                     #print('num_repeat=',self.num_repeat)
                     for i in range(self.num_repeat):
-                        logits.append(NN(tf.cast(inputs, tf.float32)))
+                        logits.append(NN(inputs))
                     mean = tf.reduce_mean(logits,0)
                     std = reduce_std(logits,0)
                     #print(mean,std)
@@ -306,11 +311,21 @@ class MAML:
                             continue
 
                 def output_weights(model_out,fast_weights):
+                    j=0
                     for i, layer in enumerate(model_out.layers):
+                        print(i,layer)
+                        print('j=',j)
                         try:
-                            layer.kernel_posterior = tfd.Independent(tfd.Normal(loc=fast_weights[3*i],scale=tf.math.exp(fast_weights[3*i+1])))
-                            layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=fast_weights[3*i+2]))
+                            print(layer.kernel_posterior)
+                            layer.kernel_posterior = tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])))
+                            layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=fast_weights[j+2]))
+                            j+=3
+                            print('tfp')
                         except AttributeError:
+                            layer.gamma = fast_weights[j]
+                            layer.beta = fast_weights[j+1]
+                            j+=2
+                            print('norm')
                             continue
                 
                 if FLAGS.datasource == 'omniglot': 
@@ -374,7 +389,7 @@ class MAML:
                 #self.update_lr = 0.1
                
                 fast_weights_a = [(weights.trainable_weights[i] - self.update_lr*grads_a[i]) for i in range(len(grads_a))]
-                #print(true_weights_a,weights_a.trainable_variables)
+                print(weights.trainable_variables)
                 '''
                 for i in range(len(true_weights_a)):
                     #tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
@@ -446,7 +461,8 @@ class MAML:
                     except AttributeError:
                         continue
                 task_lossesb_op.append(sum(lossb))
-
+                
+                print('num_updates=',num_updates) #!!!!!!!!
                 # the rest gradient steps
                 for j in range(num_updates-1): 
                     # posterior a 
