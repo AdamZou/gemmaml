@@ -75,7 +75,7 @@ FLAGS = flags.FLAGS
 
 
 class MAML:
-    def __init__(self, dim_input=1, dim_output=1, test_num_updates=5):
+    def __init__(self, dim_input=1, dim_output=1, test_num_updates=1):
         """ must call construct_model() after initializing MAML! """
         self.dim_input = dim_input
         self.dim_output = dim_output
@@ -144,8 +144,8 @@ class MAML:
     untransformed_scale_initializer=tf.random_uniform_initializer(minval=-5,maxval=5)),
                                  bias_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(is_singular=True,loc_initializer=tf.random_uniform_initializer(minval=-5,maxval=5),
     untransformed_scale_initializer=tf.random_uniform_initializer(minval=-5,maxval=5))))
-            #model.add(tf.keras.layers.Dense(self.dim_hidden[i]))
-            #model.add(tf.keras.layers.BatchNormalization())
+            model.add(tf.keras.layers.Dense(self.dim_hidden[i]))
+            model.add(tf.keras.layers.BatchNormalization())
         model.add(tfp.layers.DenseFlipout(self.dim_output,
             kernel_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(loc_initializer=tf.random_uniform_initializer(minval=-5,maxval=5),
     untransformed_scale_initializer=tf.random_uniform_initializer(minval=-5,maxval=5)),
@@ -300,10 +300,12 @@ class MAML:
                             continue
 
                 def output_weights(model_out,fast_weights):
+                    j=0
                     for i, layer in enumerate(model_out.layers):
                         try:
-                            layer.kernel_posterior = tfd.Independent(tfd.Normal(loc=fast_weights[3*i],scale=tf.math.exp(fast_weights[3*i+1])))
-                            layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=fast_weights[3*i+2]))
+                            layer.kernel_posterior = tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])))        
+                            layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=fast_weights[j+2]))
+                            j+=3
                         except AttributeError:
                             continue
                 
