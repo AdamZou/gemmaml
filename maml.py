@@ -461,7 +461,7 @@ class MAML:
                         print('q=',q)
                         print(weights_a.layers[i].kernel_posterior)
                         print(weights_b.layers[i].kernel_posterior)
-                        lossb.append(abs( weights_a.layers[i].kernel_posterior.cross_entropy(q) - weights_b.layers[i].kernel_posterior.cross_entropy(q)) )
+                        lossb.append( weights_a.layers[i].kernel_posterior.cross_entropy(q) - weights_b.layers[i].kernel_posterior.cross_entropy(q) )
                     except AttributeError:
                         continue
                 task_lossesb_op.append(sum(lossb))
@@ -556,7 +556,7 @@ class MAML:
                         try:
                             #q = layer.kernel_posterior
                             q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()))
-                            lossb.append(abs( weights_a.layers[i].kernel_posterior.cross_entropy(q) - weights_b.layers[i].kernel_posterior.cross_entropy(q)) )
+                            lossb.append( weights_a.layers[i].kernel_posterior.cross_entropy(q) - weights_b.layers[i].kernel_posterior.cross_entropy(q) )
                         except AttributeError:
                             continue
                     task_lossesb_op.append(sum(lossb))
