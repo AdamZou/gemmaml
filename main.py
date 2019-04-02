@@ -45,11 +45,11 @@ flags.DEFINE_integer('num_classes', 5, 'number of classes used in classification
 flags.DEFINE_string('baseline', None, 'oracle, or None')
 
 ## Training options
-flags.DEFINE_float('sigma', 1.0, 'scale of label distribution')
+flags.DEFINE_float('sigma', 0.1, 'scale of label distribution')
 flags.DEFINE_integer('num_repeat', 1, 'number of repeated runnings for each prediction')
 flags.DEFINE_integer('pretrain_iterations', 0, 'number of pre-training iterations.')
 flags.DEFINE_integer('metatrain_iterations', 15000, 'number of metatraining iterations.') # 15k for omniglot, 50k for sinusoid
-flags.DEFINE_integer('meta_batch_size', 2, 'number of tasks sampled per meta-update')
+flags.DEFINE_integer('meta_batch_size', 10, 'number of tasks sampled per meta-update')
 flags.DEFINE_float('meta_lr', 0.001, 'the base learning rate of the generator')
 flags.DEFINE_integer('update_batch_size', 10, 'number of examples used for inner gradient update (K for K-shot learning).')
 flags.DEFINE_float('update_lr', 1e-3, 'step size alpha for inner gradient update.') # 0.1 for omniglot
@@ -77,7 +77,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
     SUMMARY_INTERVAL = 100
     SAVE_INTERVAL = 1000
     if FLAGS.datasource == 'sinusoid':
-        PRINT_INTERVAL = 100
+        PRINT_INTERVAL = 1000   #!!!!!!!
         TEST_PRINT_INTERVAL = PRINT_INTERVAL*5
     else:
         PRINT_INTERVAL = 100
@@ -90,12 +90,21 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
 
     num_classes = data_generator.num_classes # for classification, 1 otherwise
     multitask_weights, reg_weights = [], []
-
+    # one sample pretrain 
+    batch_x, batch_y, amp, phase = data_generator.generate()
+    inputa = batch_x[:, :num_classes*FLAGS.update_batch_size, :]
+    labela = batch_y[:, :num_classes*FLAGS.update_batch_size, :]
+    inputb = batch_x[:, num_classes*FLAGS.update_batch_size:, :] # b used for testing
+    labelb = batch_y[:, num_classes*FLAGS.update_batch_size:, :]
+    feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb}
+    # 
     for itr in range(resume_itr, FLAGS.pretrain_iterations + FLAGS.metatrain_iterations):
+        
         feed_dict = {}
+       
         if 'generate' in dir(data_generator):
             batch_x, batch_y, amp, phase = data_generator.generate()
-
+            
             if FLAGS.baseline == 'oracle':
                 batch_x = np.concatenate([batch_x, np.zeros([batch_x.shape[0], batch_x.shape[1], 2])], 2)
                 for i in range(FLAGS.meta_batch_size):
@@ -109,7 +118,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
             #print('inputa.shape=',inputa.shape,inputa)
             #print('inputb.shape=',inputb.shape,inputb)
             feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb}
-
+        
         if itr < FLAGS.pretrain_iterations:    
 	    input_tensors = [model.pretrain_op]  
         else:
@@ -315,7 +324,7 @@ def main():
     if FLAGS.datasource == 'sinusoid':
         if FLAGS.train:
             #test_num_updates = 5
-            test_num_updates = 2
+            test_num_updates = 30
         else:
             test_num_updates = 10
     else:

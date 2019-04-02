@@ -270,7 +270,8 @@ class MAML:
             # outputbs[i] and lossesb[i] is the output and loss after i+1 gradient updates
             lossesa, outputas, lossesb, outputbs = [], [], [], []
             accuraciesa, accuraciesb = [], []
-            num_updates = max(self.test_num_updates, FLAGS.num_updates)
+            #num_updates = max(self.test_num_updates, FLAGS.num_updates)
+            num_updates = FLAGS.num_updates
             outputbs = [[]]*num_updates
             lossesb = [[]]*num_updates
             accuraciesb = [[]]*num_updates   
