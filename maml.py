@@ -441,7 +441,7 @@ class MAML:
                 '''
                 output_weights(weights_b,fast_weights_b)
 
-                lossb = []
+                
                 '''
                 if (num_updates==1):
                     for i in range(len(weights_a.trainable_variables)):
@@ -454,6 +454,7 @@ class MAML:
 
                 #weights_a_s = [tf.stop_gradient(weight) for weight in weights_a]
                 #weights_b_s = [tf.stop_gradient(weight) for weight in weights_b]
+                lossb = []
                 for i, layer in enumerate(weights.layers):
                     try:
                         #q = layer.kernel_posterior
@@ -463,8 +464,14 @@ class MAML:
                         print(weights_b.layers[i].kernel_posterior)
                         lossb.append( weights_a.layers[i].kernel_posterior.cross_entropy(q) - weights_b.layers[i].kernel_posterior.cross_entropy(q) )
                     except AttributeError:
-                        continue
-                task_lossesb_op.append(sum(lossb))
+                        continue 
+
+                if FLAGS.meta_loss == 'chaser_loss':
+                    meta_loss = sum(lossb)
+                if FLAGS.meta_loss == 'val_loss':
+                    meta_loss = neg_log_likelihood
+
+                task_lossesb_op.append(meta_loss)
                 
                 print('num_updates=',num_updates) #!!!!!!!!
                 # the rest gradient steps
@@ -559,7 +566,13 @@ class MAML:
                             lossb.append( weights_a.layers[i].kernel_posterior.cross_entropy(q) - weights_b.layers[i].kernel_posterior.cross_entropy(q) )
                         except AttributeError:
                             continue
-                    task_lossesb_op.append(sum(lossb))
+
+                    if FLAGS.meta_loss == 'chaser_loss':
+                        meta_loss = sum(lossb)
+                    if FLAGS.meta_loss == 'val_loss':
+                        meta_loss = neg_log_likelihood
+
+                    task_lossesb_op.append(meta_loss)
                 
                 self.outb_last=task_outputb    #!!!!!!!!!
                 task_output = [task_outputa, task_outputbs, task_lossa, task_lossesb, task_lossa_op, task_lossesb_op ]  

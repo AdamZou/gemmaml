@@ -54,7 +54,7 @@ flags.DEFINE_float('meta_lr', 0.001, 'the base learning rate of the generator')
 flags.DEFINE_integer('update_batch_size', 10, 'number of examples used for inner gradient update (K for K-shot learning).')
 flags.DEFINE_float('update_lr', 1e-3, 'step size alpha for inner gradient update.') # 0.1 for omniglot
 flags.DEFINE_integer('num_updates', 1, 'number of inner gradient updates during training.')
-
+flags.DEFINE_string('meta_loss', 'chaser_loss', 'type of the meta loss functio.')
 
 ## Model options
 flags.DEFINE_string('norm', 'batch_norm', 'batch_norm, layer_norm, or None')
@@ -97,7 +97,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
     inputb = batch_x[:, num_classes*FLAGS.update_batch_size:, :] # b used for testing
     labelb = batch_y[:, num_classes*FLAGS.update_batch_size:, :]
     feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb}
-    # 
+    #   
     for itr in range(resume_itr, FLAGS.pretrain_iterations + FLAGS.metatrain_iterations):
         
         feed_dict = {}
