@@ -133,7 +133,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
 
         result = sess.run(input_tensors, feed_dict)
         result_debug = sess.run([model.total_loss1] +  model.total_losses2, feed_dict)  #!!!!!
-        print('result_debug=',result_debug)   
+        #print('result_debug=',result_debug)   
         #print('result=',result,'\n')
         #print('result=',result[0],'\n')
         #print('result=',result[1],'\n')
@@ -152,7 +152,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
                 print_str = 'Iteration ' + str(itr - FLAGS.pretrain_iterations)
             print_str += ': ' + str(np.mean(prelosses)) + ', ' + str(np.mean(postlosses))
             print(print_str)
-            
+            print('result_debug=',result_debug)
             #wa = sess.run(model.wa.trainable_weights, feed_dict)
             #wo = sess.run(model.wo.trainable_weights, feed_dict)
             #rint('wa=',wa)
@@ -461,7 +461,7 @@ def main():
     if FLAGS.train_update_lr == -1:
         FLAGS.train_update_lr = FLAGS.update_lr
 
-    exp_string = 'cls_'+str(FLAGS.num_classes)+'.mbs_'+str(FLAGS.meta_batch_size) + '.ubs_' + str(FLAGS.train_update_batch_size) + '.numstep' + str(FLAGS.num_updates) + '.updatelr' + str(FLAGS.train_update_lr)
+    exp_string = 'cls_'+str(FLAGS.num_classes)+'.mbs_'+str(FLAGS.meta_batch_size) + '.ubs_' + str(FLAGS.train_update_batch_size) + '.numstep' + str(FLAGS.num_updates) + '.updatelr' + str(FLAGS.train_update_lr)+'.meta_loss'+str(FLAGS.meta_loss)
     
     if FLAGS.pretrain_iterations > 0:
         exp_string += 'pretrain'
