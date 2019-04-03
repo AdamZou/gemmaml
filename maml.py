@@ -208,6 +208,7 @@ class MAML:
         #N_task = self.inputa.shape[0]
         self.task_number=0
         self.weights_a, self.weights_b, self.weights_output, self.weights_test = [],[],[],[]
+        self.weights_a_stop, self.weights_b_stop = [],[]
         #task_number = np.array(range(N_task))
 	#print('N_task=',N_task)
         N_task=FLAGS.meta_batch_size
@@ -217,10 +218,16 @@ class MAML:
             weights_a((self.inputa_init[0]).astype('float32'))
             weights_b = self.construct_weights()
             weights_b((self.inputa_init[0]).astype('float32'))
+            weights_a_stop = self.construct_weights()
+            weights_a_stop((self.inputa_init[0]).astype('float32'))
+            weights_b_stop = self.construct_weights()
+            weights_b_stop((self.inputa_init[0]).astype('float32'))
             weights_output = self.construct_weights()
             weights_output((self.inputa_init[0]).astype('float32'))
             self.weights_a.append(weights_a)
             self.weights_b.append(weights_b)
+            self.weights_a_stop.append(weights_a_stop)
+            self.weights_b_stop.append(weights_b_stop)
             self.weights_output.append(weights_output)
 
         
@@ -286,6 +293,8 @@ class MAML:
                 task_outputbs, task_lossesb, task_lossesb_op = [], [], []
                 weights_a = self.weights_a[self.task_number]
                 weights_b = self.weights_b[self.task_number]
+                weights_a_stop = self.weights_a_stop[self.task_number]
+                weights_b_stop = self.weights_b_stop[self.task_number]
                 weights_output = self.weights_output[self.task_number]
                 weights_test=self.weights_test[self.task_number]
                 self.task_number = self.task_number + 1
@@ -454,15 +463,20 @@ class MAML:
 
                 #weights_a_s = [tf.stop_gradient(weight) for weight in weights_a]
                 #weights_b_s = [tf.stop_gradient(weight) for weight in weights_b]
+                fw_a_stop = [tf.stop_gradient(weight) for weight in fast_weights_a]
+                output_weights(weights_a_stop,fw_a_stop)
+                fw_b_stop = [tf.stop_gradient(weight) for weight in fast_weights_b]
+                output_weights(weights_b_stop,fw_b_stop)
+
                 lossb = []
                 for i, layer in enumerate(weights.layers):
                     try:
                         #q = layer.kernel_posterior
                         q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()))
-                        print('q=',q)
-                        print(weights_a.layers[i].kernel_posterior)
-                        print(weights_b.layers[i].kernel_posterior)
-                        lossb.append(abs( weights_a.layers[i].kernel_posterior.cross_entropy(q) - weights_b.layers[i].kernel_posterior.cross_entropy(q)) )
+                        #print('q=',q)
+                        #print(weights_a.layers[i].kernel_posterior)
+                        #print(weights_b.layers[i].kernel_posterior)
+                        lossb.append( - weights_a_stop.layers[i].kernel_posterior.cross_entropy(q) + weights_b_stop.layers[i].kernel_posterior.cross_entropy(q))
                     except AttributeError:
                         continue 
 
@@ -547,7 +561,7 @@ class MAML:
                     '''
                     output_weights(weights_b,fast_weights_b)
 
-                    lossb = []
+                    
 #                    weights_a = [tf.stop_gradient(weight) for weight in weights_a]
 #                    weights_b = [tf.stop_gradient(weight) for weight in weights_b]
                     '''
@@ -559,11 +573,17 @@ class MAML:
                             #tf.assign(weights_a.trainable_variables[i] ,tf.stop_gradient(weights_a.trainable_variables[i]) )
                             weights_b.trainable_variables[i] = tf.stop_gradient(weights_b.trainable_variables[i])
                     '''
+                    fw_a_stop = [tf.stop_gradient(weight) for weight in fast_weights_a]
+                    output_weights(weights_a_stop,fw_a_stop)
+                    fw_b_stop = [tf.stop_gradient(weight) for weight in fast_weights_b]
+                    output_weights(weights_b_stop,fw_b_stop)
+
+                    lossb = []
                     for i, layer in enumerate(weights.layers):
                         try:
                             #q = layer.kernel_posterior
                             q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()))
-                            lossb.append(abs( weights_a.layers[i].kernel_posterior.cross_entropy(q) - weights_b.layers[i].kernel_posterior.cross_entropy(q)) )
+                            lossb.append( - weights_a_stop.layers[i].kernel_posterior.cross_entropy(q) + weights_b_stop.layers[i].kernel_posterior.cross_entropy(q) )
                         except AttributeError:
                             continue
 
