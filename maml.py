@@ -482,6 +482,8 @@ class MAML:
                     meta_loss = sum(lossb)
                 if FLAGS.meta_loss == 'val_loss':
                     meta_loss = neg_log_likelihood
+                if FLAGS.meta_loss == 'traditional_val_loss':   # this one is true
+                    meta_loss = neg_log_likelihood
 
                 task_lossesb_op.append(meta_loss)
                 
@@ -502,6 +504,12 @@ class MAML:
                         #labels_distribution = tfd.Normal(loc=mean ,scale= std) #???    
                         labels_distribution = tfd.Normal(loc=mean ,scale= self.sigma)       
                     neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(labela, tf.float32)))
+                    # traditional val loss
+                    mean_tvl , std_tvl = predict(weights_a,inputb)
+                    labels_distribution_tvl = tfd.Normal(loc=mean_tvl ,scale= self.sigma) 
+                    neg_log_likelihood_tvl = -tf.reduce_mean(labels_distribution_tvl.log_prob(tf.cast(labelb, tf.float32)))
+                    #
+
                     kl = sum(weights_a.losses) / tf.cast(tf.size(inputa), tf.float32)  #???               
     	            elbo_loss_a = neg_log_likelihood + kl           
                     #grads_a = tf.gradients(elbo_loss_a, weights_a.trainable_weights)
@@ -590,6 +598,8 @@ class MAML:
                         meta_loss = sum(lossb)
                     if FLAGS.meta_loss == 'val_loss':
                         meta_loss = neg_log_likelihood
+                    if FLAGS.meta_loss == 'traditional_val_loss':
+                        meta_loss = neg_log_likelihood_tvl
 
                     task_lossesb_op.append(meta_loss)
                 
