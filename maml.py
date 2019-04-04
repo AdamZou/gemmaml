@@ -134,7 +134,7 @@ class MAML:
     
         return model
 
-    def construct_fc_weights(self):
+    def construct_fc_weights_init(self):
         #with tf.name_scope("bayesian_neural_net", values=[images]):
         model = tf.keras.Sequential()
         #model = tf.keras.Sequential([tfp.layers.DenseFlipout(self.dim_hidden[0],input_shape=(self.dim_input,) ,activation=tf.nn.relu,kernel_initializer='random_uniform')])
@@ -153,9 +153,23 @@ class MAML:
     untransformed_scale_initializer=tf.random_uniform_initializer(minval=-3.1,maxval=-3)),
                                  bias_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(is_singular=True,loc_initializer=tf.random_uniform_initializer(minval=-0.1,maxval=0.1),
     untransformed_scale_initializer=tf.random_uniform_initializer(minval=-3.1,maxval=-3))))
-        
-     
+           
         return model
+
+
+    def construct_fc_weights(self):
+        #with tf.name_scope("bayesian_neural_net", values=[images]):
+        model = tf.keras.Sequential()
+        #model = tf.keras.Sequential([tfp.layers.DenseFlipout(self.dim_hidden[0],input_shape=(self.dim_input,) ,activation=tf.nn.relu,kernel_initializer='random_uniform')])
+        for i in range(len(self.dim_hidden)):
+            model.add(tfp.layers.DenseFlipout(self.dim_hidden[i] ,activation=tf.nn.relu))
+            #model.add(tf.keras.layers.Dense(self.dim_hidden[i]))
+            #model.add(tf.keras.layers.BatchNormalization())
+
+        model.add(tfp.layers.DenseFlipout(self.dim_output))
+           
+        return model
+
 
 
     def construct_model(self, input_tensors=None, prefix='metatrain_'):
@@ -364,7 +378,16 @@ class MAML:
                     except AttributeError:
                         continue 
                 '''
-                
+
+                # dumb_loss
+                mean , std = predict(weights,tf.concat([inputa,inputb],0))
+                #labels_distribution = tfd.Normal(loc=mean ,scale= std) #???
+                labels_distribution = tfd.Normal(loc=mean ,scale= self.sigma)
+                neg_log_likelihood_dumb = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(tf.concat([labela,labelb],0), tf.float32)))       
+         
+                #
+
+
                 deter(self.weights_test[self.task_number-1],self.weights)
                 #self.inputa_check = self.inputa_test
                 task_outputa = self.weights_test[self.task_number-1](tf.cast(self.inputa[0], tf.float32))  #!!! maybe wrong
@@ -468,24 +491,34 @@ class MAML:
                 fw_b_stop = [tf.stop_gradient(weight) for weight in fast_weights_b]
                 output_weights(weights_b_stop,fw_b_stop)
 
-                lossb = []
+                lossb_abq = []
+                lossb_ab_kl =[]
+                lossb_bq =[]
+
                 for i, layer in enumerate(weights.layers):
                     try:
                         #q = layer.kernel_posterior
                         q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()))
-                        #print('q=',q)
-                        #print(weights_a.layers[i].kernel_posterior)
-                        #print(weights_b.layers[i].kernel_posterior)
-                        lossb.append( - weights_a_stop.layers[i].kernel_posterior.cross_entropy(q) + weights_b_stop.layers[i].kernel_posterior.cross_entropy(q))
+                        lossb_abq.append( - weights_a_stop.layers[i].kernel_posterior.cross_entropy(q) + weights_b_stop.layers[i].kernel_posterior.cross_entropy(q) )
+                        lossb_ab_kl.append(weights_b_stop.layers[i].kernel_posterior.kl_divergence(weights_a.layers[i].kernel_posterior) )
+                        lossb_bq.append(weights_b_stop.layers[i].kernel_posterior.cross_entropy(q))
                     except AttributeError:
-                        continue 
+                        continue
 
                 if FLAGS.meta_loss == 'chaser_loss':
-                    meta_loss = sum(lossb)
+                    meta_loss = sum(lossb_abq)
+                if FLAGS.meta_loss == 'chaser_loss_kl':
+                    meta_loss = sum(lossb_ab_kl)
+                if FLAGS.meta_loss == 'mix_effect':
+                    meta_loss = sum(lossb_bq)
                 if FLAGS.meta_loss == 'val_loss':
                     meta_loss = neg_log_likelihood
+            
                 if FLAGS.meta_loss == 'traditional_val_loss':   # this one is true
                     meta_loss = neg_log_likelihood
+
+                if FLAGS.meta_loss == 'dumb_loss':   # null 
+                    meta_loss = neg_log_likelihood_dumb   
 
                 task_lossesb_op.append(meta_loss)
                 
@@ -557,7 +590,8 @@ class MAML:
                         mean , std = predict(weights_b,tf.concat([inputa,inputb],0))
                         #labels_distribution = tfd.Normal(loc=mean ,scale= std) #???
                         labels_distribution = tfd.Normal(loc=mean ,scale= self.sigma)
-                        neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(tf.concat([labela,labelb],0), tf.float32)))               
+                        neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(tf.concat([labela,labelb],0), tf.float32)))       
+
                     kl = sum(weights_b.losses) / tf.cast(tf.size(inputa)+tf.size(inputb), tf.float32)  #???
                     elbo_loss_b = neg_log_likelihood + kl
                     grads_b = tf.gradients(elbo_loss_b, fast_weights_b)                 
@@ -586,21 +620,33 @@ class MAML:
                     fw_b_stop = [tf.stop_gradient(weight) for weight in fast_weights_b]
                     output_weights(weights_b_stop,fw_b_stop)
 
-                    lossb = []
+                    lossb_abq = []
+                    lossb_ab_kl =[]
+                    lossb_bq =[]
+
                     for i, layer in enumerate(weights.layers):
                         try:
                             #q = layer.kernel_posterior
                             q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()))
-                            lossb.append( - weights_a_stop.layers[i].kernel_posterior.cross_entropy(q) + weights_b_stop.layers[i].kernel_posterior.cross_entropy(q) )
+                            lossb_abq.append( - weights_a_stop.layers[i].kernel_posterior.cross_entropy(q) + weights_b_stop.layers[i].kernel_posterior.cross_entropy(q) )
+                            lossb_ab_kl.append(weights_b_stop.layers[i].kernel_posterior.kl_divergence(weights_a.layers[i].kernel_posterior) )
+                            lossb_bq.append(weights_b_stop.layers[i].kernel_posterior.cross_entropy(q))
                         except AttributeError:
                             continue
 
                     if FLAGS.meta_loss == 'chaser_loss':
-                        meta_loss = sum(lossb)
+                        meta_loss = sum(lossb_abq)
+                    if FLAGS.meta_loss == 'chaser_loss_kl':
+                        meta_loss = sum(lossb_ab_kl)
+                    if FLAGS.meta_loss == 'mix_effect':
+                        meta_loss = sum(lossb_bq)
                     if FLAGS.meta_loss == 'val_loss':
                         meta_loss = neg_log_likelihood
                     if FLAGS.meta_loss == 'traditional_val_loss':
                         meta_loss = neg_log_likelihood_tvl
+                    if FLAGS.meta_loss == 'dumb_loss':
+                        meta_loss = neg_log_likelihood_dumb
+
 
                     task_lossesb_op.append(meta_loss)
                 
