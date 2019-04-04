@@ -152,9 +152,7 @@ class MAML:
             kernel_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(loc_initializer=tf.random_uniform_initializer(minval=-0.1,maxval=0.1),
     untransformed_scale_initializer=tf.random_uniform_initializer(minval=-3.1,maxval=-3)),
                                  bias_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(is_singular=True,loc_initializer=tf.random_uniform_initializer(minval=-0.1,maxval=0.1),
-    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-3.1,maxval=-3))))
-        
-     
+    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-3.1,maxval=-3)))) 
         return model
 
 
