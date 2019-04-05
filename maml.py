@@ -133,7 +133,7 @@ class MAML:
             tfp.layers.DenseFlipout(self.dim_output)])
     
         return model
-
+'''
     def construct_fc_weights_init(self):
         #with tf.name_scope("bayesian_neural_net", values=[images]):
         model = tf.keras.Sequential()
@@ -155,7 +155,7 @@ class MAML:
     untransformed_scale_initializer=tf.random_uniform_initializer(minval=-3.1,maxval=-3)))) 
            
         return model
-
+'''
 
     def construct_fc_weights(self):
         #with tf.name_scope("bayesian_neural_net", values=[images]):

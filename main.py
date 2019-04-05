@@ -465,6 +465,8 @@ def main():
 
     exp_string = 'cls_'+str(FLAGS.num_classes)+'.mbs_'+str(FLAGS.meta_batch_size) + '.ubs_' + str(FLAGS.train_update_batch_size) + '.numstep' + str(FLAGS.num_updates) + '.updatelr' + str(FLAGS.train_update_lr)+'.meta_loss'+str(FLAGS.meta_loss)
     
+    if FLAGS.one_sample:
+        exp_string += 'one_sample'
     if FLAGS.pretrain_iterations > 0:
         exp_string += 'pretrain'
     if FLAGS.num_filters != 64:
