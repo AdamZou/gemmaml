@@ -197,13 +197,14 @@ class MAML:
         #print(self.inputa[1])
         
         #N_task = self.inputa.shape[0]
-        self.task_number=0
-        self.weights_a, self.weights_b, self.weights_output, self.weights_test = [],[],[],[]
-        self.weights_a_stop, self.weights_b_stop = [],[]
+        #self.task_number=0
+        #self.weights_a, self.weights_b, self.weights_output = [],[],[]
+        #self.weights_a_stop, self.weights_b_stop = [],[]
         #task_number = np.array(range(N_task))
 	#print('N_task=',N_task)
         N_task=FLAGS.meta_batch_size
         print('N_task=',N_task) 
+        '''
         for i in range(N_task):
             weights_a = self.construct_weights()
             weights_a((self.inputa_init[0]).astype('float32'))
@@ -221,12 +222,12 @@ class MAML:
             self.weights_b_stop.append(weights_b_stop)
             self.weights_output.append(weights_output)
 
-        
-	    weights_test = self.construct_weights()
+            
+    	    weights_test = self.construct_weights()
             weights_test((self.inputa_init[0]).astype('float32'))
             self.weights_test.append(weights_test)
-
-       
+        '''
+        
 	 #   print(self.labela)
         with tf.variable_scope('model', reuse=None) as training_scope:
             if 'weights' in dir(self):   
@@ -244,8 +245,21 @@ class MAML:
                 if FLAGS.datasource == 'sinusoid':
                     self.weights = weights = self.construct_weights()
                     weights((self.inputa_init[0]).astype('float32'))
-                    self.weights_cp = weights_cp = self.construct_weights()
-                    weights_cp((self.inputa_init[0]).astype('float32'))
+                    #self.weights_cp = weights_cp = self.construct_weights()
+                    #weights_cp((self.inputa_init[0]).astype('float32'))
+                    weights_a = self.construct_weights()
+                    weights_a((self.inputa_init[0]).astype('float32'))
+                    weights_b = self.construct_weights()
+                    weights_b((self.inputa_init[0]).astype('float32'))
+                    weights_a_stop = self.construct_weights()
+                    weights_a_stop((self.inputa_init[0]).astype('float32'))
+                    weights_b_stop = self.construct_weights()
+                    weights_b_stop((self.inputa_init[0]).astype('float32'))
+                    weights_output = self.construct_weights()
+                    weights_output((self.inputa_init[0]).astype('float32'))
+
+
+
                     '''
                     self.weights_a = weights_a = self.construct_weights()
                     weights_a((self.inputa[0]).astype('float32'))
@@ -274,7 +288,7 @@ class MAML:
             lossesb = [[]]*num_updates
             accuraciesb = [[]]*num_updates   
 
-            self.weights_cp.layers[0].kernel_posterior=self.weights.layers[0].kernel_posterior       
+            #self.weights_cp.layers[0].kernel_posterior=self.weights.layers[0].kernel_posterior       
             
             #self.weights_test[0].layers[0].kernel_posterior = tfd.Independent(tfd.Normal(loc=weights.layers[0].kernel_posterior.mean(),scale=0.000000001))
 
@@ -282,14 +296,15 @@ class MAML:
                 """ Perform gradient descent for one task in the meta-batch. """
                 inputa, inputb, labela, labelb = inp
                 task_outputbs, task_lossesb, task_lossesb_op = [], [], []
+                '''
                 weights_a = self.weights_a[self.task_number]
                 weights_b = self.weights_b[self.task_number]
                 weights_a_stop = self.weights_a_stop[self.task_number]
                 weights_b_stop = self.weights_b_stop[self.task_number]
                 weights_output = self.weights_output[self.task_number]
-                weights_test=self.weights_test[self.task_number]
+                #weights_test=self.weights_test[self.task_number]
                 self.task_number = self.task_number + 1
-
+                '''
 
                 if self.classification:
                     task_accuraciesb = []
@@ -355,7 +370,7 @@ class MAML:
                     mean = weights(tf.cast(inputa, tf.float32))
 
                 #deter(weights_output,weights)
-                print('task_number=',self.task_number)
+                #print('task_number=',self.task_number)
                 #self.weights_test[self.task_number-1].layers[0].kernel_posterior = tfd.Independent(tfd.Normal(loc=self.weights_cp.layers[0].kernel_posterior.mean(),scale=0.000000001))
                 #self.weights_test[self.task_number-1].layers[0].kernel_posterior = tfd.Independent(tfd.Normal(loc=self.weights.layers[0].kernel_posterior.mean(),scale=0.000000001))               
                 '''
@@ -368,10 +383,9 @@ class MAML:
                 '''
 
 
-
-                deter(self.weights_test[self.task_number-1],self.weights)
+                deter(weights_output,self.weights)
                 #self.inputa_check = self.inputa_test
-                task_outputa = self.weights_test[self.task_number-1](tf.cast(self.inputa[0], tf.float32))  #!!! maybe wrong
+                task_outputa = weights_output(tf.cast(self.inputa[0], tf.float32))  #!!! maybe wrong
                 self.task_outputa = task_outputa #debug!!!!
                 self.task_outputa_test = self.weights(tf.cast(self.inputa[0], tf.float32))
                 #init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
