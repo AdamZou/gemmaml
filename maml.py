@@ -530,7 +530,7 @@ class MAML:
                 # the rest gradient steps
                 for j in range(num_updates-1): 
                     # posterior a 
-             
+                    
                     #logits = weights_a(tf.cast(inputa, tf.float32))
                     if not self.classification:
                         mean , std = predict(weights_a,inputa)

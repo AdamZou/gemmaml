@@ -55,6 +55,7 @@ flags.DEFINE_integer('update_batch_size', 10, 'number of examples used for inner
 flags.DEFINE_float('update_lr', 1e-3, 'step size alpha for inner gradient update.') # 0.1 for omniglot
 flags.DEFINE_integer('num_updates', 1, 'number of inner gradient updates during training.')
 flags.DEFINE_string('meta_loss', 'chaser_loss', 'type of the meta loss functio.')
+flags.DEFINE_bool('one_sample', False, 'use the same sample for all training iterations or not')
 
 ## Model options
 flags.DEFINE_string('norm', 'batch_norm', 'batch_norm, layer_norm, or None')
@@ -100,25 +101,26 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
     #   
     for itr in range(resume_itr, FLAGS.pretrain_iterations + FLAGS.metatrain_iterations):
         
-        feed_dict = {}
-       
-        if 'generate' in dir(data_generator):
-            batch_x, batch_y, amp, phase = data_generator.generate()
-            
-            if FLAGS.baseline == 'oracle':
-                batch_x = np.concatenate([batch_x, np.zeros([batch_x.shape[0], batch_x.shape[1], 2])], 2)
-                for i in range(FLAGS.meta_batch_size):
-                    batch_x[i, :, 1] = amp[i]
-                    batch_x[i, :, 2] = phase[i]
+        if not FLAGS.one_sample:            
+            feed_dict = {}
+           
+            if 'generate' in dir(data_generator):
+                batch_x, batch_y, amp, phase = data_generator.generate()
+                
+                if FLAGS.baseline == 'oracle':
+                    batch_x = np.concatenate([batch_x, np.zeros([batch_x.shape[0], batch_x.shape[1], 2])], 2)
+                    for i in range(FLAGS.meta_batch_size):
+                        batch_x[i, :, 1] = amp[i]
+                        batch_x[i, :, 2] = phase[i]
 
-            inputa = batch_x[:, :num_classes*FLAGS.update_batch_size, :]
-            labela = batch_y[:, :num_classes*FLAGS.update_batch_size, :]
-            inputb = batch_x[:, num_classes*FLAGS.update_batch_size:, :] # b used for testing
-            labelb = batch_y[:, num_classes*FLAGS.update_batch_size:, :]
-            #print('inputa.shape=',inputa.shape,inputa)
-            #print('inputb.shape=',inputb.shape,inputb)
-            feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb}
-        
+                inputa = batch_x[:, :num_classes*FLAGS.update_batch_size, :]
+                labela = batch_y[:, :num_classes*FLAGS.update_batch_size, :]
+                inputb = batch_x[:, num_classes*FLAGS.update_batch_size:, :] # b used for testing
+                labelb = batch_y[:, num_classes*FLAGS.update_batch_size:, :]
+                #print('inputa.shape=',inputa.shape,inputa)
+                #print('inputb.shape=',inputb.shape,inputb)
+                feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb}
+            
         if itr < FLAGS.pretrain_iterations:    
 	    input_tensors = [model.pretrain_op]  
         else:
