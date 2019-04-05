@@ -133,29 +133,7 @@ class MAML:
             tfp.layers.DenseFlipout(self.dim_output)])
     
         return model
-'''
-    def construct_fc_weights_init(self):
-        #with tf.name_scope("bayesian_neural_net", values=[images]):
-        model = tf.keras.Sequential()
-        #model = tf.keras.Sequential([tfp.layers.DenseFlipout(self.dim_hidden[0],input_shape=(self.dim_input,) ,activation=tf.nn.relu,kernel_initializer='random_uniform')])
-        for i in range(len(self.dim_hidden)):
-            model.add(tfp.layers.DenseFlipout(self.dim_hidden[i] ,activation=tf.nn.relu,
 
-                kernel_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(loc_initializer=tf.random_uniform_initializer(minval=-0.1,maxval=0.1),
-    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-3.1,maxval=-3)),
-                                 bias_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(is_singular=True,loc_initializer=tf.random_uniform_initializer(minval=-0.1,maxval=0.1),
-    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-3.1,maxval=-3))))
-            #model.add(tf.keras.layers.Dense(self.dim_hidden[i]))
-            #model.add(tf.keras.layers.BatchNormalization())
-
-        model.add(tfp.layers.DenseFlipout(self.dim_output,
-            kernel_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(loc_initializer=tf.random_uniform_initializer(minval=-0.1,maxval=0.1),
-    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-3.1,maxval=-3)),
-                                 bias_posterior_fn=tfp.python.layers.default_mean_field_normal_fn(is_singular=True,loc_initializer=tf.random_uniform_initializer(minval=-0.1,maxval=0.1),
-    untransformed_scale_initializer=tf.random_uniform_initializer(minval=-3.1,maxval=-3)))) 
-           
-        return model
-'''
 
     def construct_fc_weights(self):
         #with tf.name_scope("bayesian_neural_net", values=[images]):
@@ -165,7 +143,6 @@ class MAML:
             model.add(tfp.layers.DenseFlipout(self.dim_hidden[i] ,activation=tf.nn.relu))
             #model.add(tf.keras.layers.Dense(self.dim_hidden[i]))
             #model.add(tf.keras.layers.BatchNormalization())
-
         model.add(tfp.layers.DenseFlipout(self.dim_output))
            
         return model
