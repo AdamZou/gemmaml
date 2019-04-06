@@ -73,6 +73,7 @@ flags.DEFINE_integer('test_iter', -1, 'iteration to load model (-1 for latest mo
 flags.DEFINE_bool('test_set', False, 'Set to true to test on the the test set, False for the validation set.')
 flags.DEFINE_integer('train_update_batch_size', -1, 'number of examples used for gradient update during training (use if you want to test with a different number).')
 flags.DEFINE_float('train_update_lr', -1, 'value of inner gradient step step during training. (use if you want to test with a different value)') # 0.1 for omniglot
+flags.DEFINE_integer('test_num_updates', -1, 'number of inner gradient updates during testing.')
 
 def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
     SUMMARY_INTERVAL = 100
@@ -272,6 +273,7 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
             #print('watw=',watw)
             #print('wa=',wa)
             #print('wo=',wo)
+            '''
             print('inputa=',inputa)
             print('labela=',labela)
             print('taskoutputa=',sess.run(model.task_outputa, feed_dict))
@@ -281,7 +283,7 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
             print('outb=',outb)
             print('outb_last=',sess.run(model.outb_last, feed_dict))
             print('lb=',lb) 
-            '''
+           
             print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
         #print(sess.run(model.weights_cp.layers[0].kernel_posterior.mean()))
             print(sess.run(model.weights_test[0].layers[0].kernel_posterior.mean()))
@@ -439,6 +441,7 @@ def main():
         #input_tensors = None
     #sess = tf.InteractiveSession()
     #tf.global_variables_initializer().run()
+
     model = MAML(dim_input, dim_output, test_num_updates=test_num_updates)
     if FLAGS.train or not tf_data_load or FLAGS.datasource == 'sinusoid':
         print('input_tensors=',input_tensors)
@@ -448,8 +451,11 @@ def main():
         model.construct_model(input_tensors=metaval_input_tensors, prefix='metaval_')
     model.summ_op = tf.summary.merge_all()
 
+  #  if FLAGS.train == False:
+  #      tf.reset_default_graph()
+
     saver = loader = tf.train.Saver(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES), max_to_keep=5)
-    #saver = loader = tf.train.Saver(model.weights.trainable_variables, max_to_keep=2)
+    #saver = loader = tf.train.Saver({'weights':model.weights.trainable_variables}, max_to_keep=2)
 
 
     sess = tf.InteractiveSession()
@@ -506,7 +512,7 @@ def main():
     print('output_weights')
     print(sess.run(model.task_outputa_test))
     print(sess.run(model.task_outputa_test))
-    '''
+    
 
     for i, layer in enumerate(model.weights_test[0].layers):
         print(i)
@@ -531,7 +537,7 @@ def main():
         [ 1.852195  ]]])
     print(sess.run(model.weights_test[0](tf.cast(inputa_1[0], tf.float32))))
     print(sess.run(model.weights_test[0](tf.cast(inputa_1[0], tf.float32))))
-
+    '''
     if FLAGS.resume or not FLAGS.train:
         print(FLAGS.logdir + '/' + exp_string)
         model_file = tf.train.latest_checkpoint(FLAGS.logdir + '/' + exp_string)
@@ -544,6 +550,7 @@ def main():
             saver.restore(sess, model_file)
     
     #print(inputa[0])
+    '''
     for i, layer in enumerate(model.weights_test[0].layers):
         print(i)
     	try: 
@@ -568,7 +575,7 @@ def main():
     print(sess.run(model.weights_test[0](tf.cast(inputa_1[0], tf.float32))))
     print(sess.run(model.weights_test[0](tf.cast(inputa_1[0], tf.float32))))
     #print(sess.run(model.weights_test(inputa[0])))
-    '''
+   
     print('test_2:')
     print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
     #print(sess.run(model.weights_cp.layers[0].kernel_posterior.mean()))
@@ -585,11 +592,16 @@ def main():
     print(sess.run(model.task_outputa_test)) 
     '''
     if FLAGS.train:
+        #print tf.get_default_graph().as_graph_def()
+        #for i, var in enumerate(saver._var_list):
+        #    print('Var {}: {}'.format(i, var))
         train(model, saver, sess, exp_string, data_generator, resume_itr)
     else:
        
         #print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
-        test(model, saver, sess, exp_string, data_generator, test_num_updates) 
+        test(model, saver, sess, exp_string, data_generator, test_num_updates)
+        #for i, var in enumerate(saver._var_list):
+        #    print('Var {}: {}'.format(i, var)) 
         '''
         print('test_3:')
         print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
