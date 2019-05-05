@@ -518,7 +518,8 @@ class MAML:
 
                 if FLAGS.meta_loss == 'dumb_loss':    
                     meta_loss = neg_log_likelihood_dumb   
-
+                if FLAGS.meta_loss == 'bmaml_loss':
+                    meta_loss = sum(lossb_ab_kl)
                 task_lossesb_op.append(meta_loss)
                 
                 print('num_updates=',num_updates) #!!!!!!!!
@@ -701,7 +702,7 @@ class MAML:
                             except AttributeError:
                                 continue
                         
-                        meta_loss = sum(lossb_ab_kl)                       
+                        meta_loss = sum(lossb_abq)                       
                         task_lossesb_op.append(meta_loss)
                     
                 
