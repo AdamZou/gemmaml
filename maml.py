@@ -119,7 +119,7 @@ class MAML:
         channels = self.channels
         model = tf.keras.Sequential([
             #tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, padding="SAME", activation=tf.nn.relu,input_shape=(None,28, 28, 1)),
-            tf.keras.layers.Reshape((-1,channels,self.img_size, self.img_size)),
+            tf.keras.layers.Reshape((self.img_size, self.img_size,channels)),
             tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, padding="SAME", activation=tf.nn.relu),
             #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
             tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=5, padding="SAME", activation=tf.nn.relu),

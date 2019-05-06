@@ -441,7 +441,7 @@ def main():
         #input_tensors = None
     #sess = tf.InteractiveSession()
     #tf.global_variables_initializer().run()
-
+    
     model = MAML(dim_input, dim_output, test_num_updates=test_num_updates)
     if FLAGS.train or not tf_data_load or FLAGS.datasource == 'sinusoid':
         print('input_tensors=',input_tensors)
@@ -450,11 +450,10 @@ def main():
         print('metaval_input_tensors=',metaval_input_tensors)
         model.construct_model(input_tensors=metaval_input_tensors, prefix='metaval_')
     model.summ_op = tf.summary.merge_all()
-
-  #  if FLAGS.train == False:
-  #      tf.reset_default_graph()
+    
 
     saver = loader = tf.train.Saver(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES), max_to_keep=5)
+    
     #saver = loader = tf.train.Saver({'weights':model.weights.trainable_variables}, max_to_keep=2)
 
 
@@ -497,8 +496,13 @@ def main():
 
     tf.global_variables_initializer().run()
     tf.train.start_queue_runners()
-  
-    ''' 
+    '''
+    it = sess.run(input_tensors)
+    with open('input_tensors.pkl', 'wb') as handle:
+        pickle.dump(it, handle)
+    print('dim_input=',dim_input)
+    print('dim_output=',dim_output)
+    
     print('test_1:') 
     print(tf.cast(inputa[0], tf.float32))
     print(sess.run(model.weights.layers[1].kernel_posterior.mean()))
