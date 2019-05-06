@@ -148,7 +148,7 @@ class MAML:
         return model
 
 
-
+    
     def construct_model(self, input_tensors=None, prefix='metatrain_'):
         # a: training data for inner gradient, b: test data for meta gradient
         if FLAGS.datasource == 'sinusoid':
@@ -245,8 +245,7 @@ class MAML:
                 if FLAGS.datasource == 'sinusoid':
                     self.weights = weights = self.construct_weights()
                     weights((self.inputa_init[0]).astype('float32'))
-                    #self.weights_cp = weights_cp = self.construct_weights()
-                    #weights_cp((self.inputa_init[0]).astype('float32'))
+        
                     weights_a = self.construct_weights()
                     weights_a((self.inputa_init[0]).astype('float32'))
                     weights_b = self.construct_weights()
@@ -272,6 +271,19 @@ class MAML:
                     '''
                 else:
                     self.weights = weights = self.construct_weights()
+                    weights((self.inputa_init[0]).astype('float32'))
+        
+                    weights_a = self.construct_weights()
+                    weights_a((self.inputa_init[0]).astype('float32'))
+                    weights_b = self.construct_weights()
+                    weights_b((self.inputa_init[0]).astype('float32'))
+                    weights_a_stop = self.construct_weights()
+                    weights_a_stop((self.inputa_init[0]).astype('float32'))
+                    weights_b_stop = self.construct_weights()
+                    weights_b_stop((self.inputa_init[0]).astype('float32'))
+                    weights_output = self.construct_weights()
+                    weights_output((self.inputa_init[0]).astype('float32'))
+
                     #weights(self.inputa[0])
                     #self.weights_a = weights_a = self.construct_weights()
                     #weights_a(self.inputa[0])
