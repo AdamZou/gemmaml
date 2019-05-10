@@ -439,6 +439,8 @@ class MAML:
                 elbo_loss_a = neg_log_likelihood + kl                
                 task_lossa_op = elbo_loss_a
                 grads_a = tf.gradients(elbo_loss_a, weights.trainable_weights) 
+                if FLAGS.stop_grad:
+                    grads_a = [tf.stop_gradient(grad) for grad in grads_a]
                 self.grads_1 = grads_a #!!!!!!
                 
                 
@@ -493,10 +495,12 @@ class MAML:
                 elbo_loss_b = neg_log_likelihood + kl 
                 #grads_b = tf.gradients(elbo_loss_b, weights_a.trainable_weights)        
                 grads_b = tf.gradients(elbo_loss_b, fast_weights_a) 
+                if FLAGS.stop_grad:
+                    grads_b = [tf.stop_gradient(grad) for grad in grads_b]
                 fast_weights_b = [(fast_weights_a[i]  - self.update_lr*grads_b[i]) for i in range(len(grads_b))]     #!!!!!          
                 '''
                 for i in range(len(true_weights_b)):
-                    #tf.assign(weights_b.trainable_variables[i] ,true_weights_b[i] )
+                    #tf.assign(weights_b.trainable_variables[i] ,true_weights_b[i] ) 
                     weights_b.trainable_weights[i] = true_weights_b[i]
                 '''
                 output_weights(weights_b,fast_weights_b)
@@ -578,6 +582,8 @@ class MAML:
     	            elbo_loss_a = neg_log_likelihood + kl           
                     #grads_a = tf.gradients(elbo_loss_a, weights_a.trainable_weights)
                     grads_a = tf.gradients(elbo_loss_a, fast_weights_a)
+                    if FLAGS.stop_grad:
+                        grads_a = [tf.stop_gradient(grad) for grad in grads_a]
                     #if FLAGS.stop_grad:
                     #    grads_a = [tf.stop_gradient(grad) for grad in grads] 
                                        
@@ -626,7 +632,9 @@ class MAML:
 
                         kl = sum(weights_b.losses) / tf.cast(tf.size(inputa)+tf.size(inputb), tf.float32)  #???
                         elbo_loss_b = neg_log_likelihood + kl
-                        grads_b = tf.gradients(elbo_loss_b, fast_weights_b)                 
+                        grads_b = tf.gradients(elbo_loss_b, fast_weights_b)     
+                        if FLAGS.stop_grad:
+                            grads_b = [tf.stop_gradient(grad) for grad in grads_b]
                         fast_weights_b = [(fast_weights_b[i]  - self.update_lr*grads_b[i]) for i in range(len(grads_b))]               
                         '''
                         for i in range(len(true_weights_b)):
