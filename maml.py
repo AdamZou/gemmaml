@@ -372,10 +372,12 @@ class MAML:
                             print('tfp')
 
                         except AttributeError:
+                            '''
                             layer.gamma = fast_weights[j]
                             layer.beta = fast_weights[j+1]
                             j+=2
                             print('norm')
+                            '''
                             continue
                
 
@@ -758,7 +760,7 @@ class MAML:
             #result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb), dtype=out_dtype, parallel_iterations=FLAGS.meta_batch_size)
             #result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb), dtype=out_dtype)
 
-            outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op = [None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task
+            outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op, accuraciesa, accuraciesb = [None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task, [None]*N_task
             for i in range(N_task):
                 elems=(self.inputa[i], self.inputb[i], self.labela[i], self.labelb[i])
                 if self.classification:
