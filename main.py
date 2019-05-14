@@ -92,13 +92,15 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
 
     num_classes = data_generator.num_classes # for classification, 1 otherwise
     multitask_weights, reg_weights = [], []
-    # one sample pretrain 
-    batch_x, batch_y, amp, phase = data_generator.generate()
-    inputa = batch_x[:, :num_classes*FLAGS.update_batch_size, :]
-    labela = batch_y[:, :num_classes*FLAGS.update_batch_size, :]
-    inputb = batch_x[:, num_classes*FLAGS.update_batch_size:, :] # b used for testing
-    labelb = batch_y[:, num_classes*FLAGS.update_batch_size:, :]
-    feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb}
+    
+    # one sample pretrain for sinusoid
+    if 'generate' in dir(data_generator):
+        batch_x, batch_y, amp, phase = data_generator.generate()
+        inputa = batch_x[:, :num_classes*FLAGS.update_batch_size, :]
+        labela = batch_y[:, :num_classes*FLAGS.update_batch_size, :]
+        inputb = batch_x[:, num_classes*FLAGS.update_batch_size:, :] # b used for testing
+        labelb = batch_y[:, num_classes*FLAGS.update_batch_size:, :]
+        feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb}
     #   
     for itr in range(resume_itr, FLAGS.pretrain_iterations + FLAGS.metatrain_iterations):
         
