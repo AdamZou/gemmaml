@@ -236,12 +236,6 @@ class MAML:
                 training_scope.reuse_variables()
                 weights = self.weights
                 
-                weights_a = self.weights_a
-                weights_b = self.weights_b
-                weights_output = self.weights_output
-                
-                weights_a_stop = self.weights_a_stop
-                weights_b_stop = self.weights_b_stop
 		
             else:
                 print('it is fine')
@@ -252,16 +246,16 @@ class MAML:
                 self.weights = weights = self.construct_weights()
                 weights(self.inputa_init[0])
     
-                weights_a = self.construct_weights()
-                weights_a(self.inputa_init[0])
-                weights_b = self.construct_weights()
-                weights_b(self.inputa_init[0])
-                weights_a_stop = self.construct_weights()
-                weights_a_stop(self.inputa_init[0])
-                weights_b_stop = self.construct_weights()
-                weights_b_stop(self.inputa_init[0])
-                weights_output = self.construct_weights()
-                weights_output(self.inputa_init[0])
+            weights_a = self.construct_weights()
+            weights_a(self.inputa_init[0])
+            weights_b = self.construct_weights()
+            weights_b(self.inputa_init[0])
+            weights_a_stop = self.construct_weights()
+            weights_a_stop(self.inputa_init[0])
+            weights_b_stop = self.construct_weights()
+            weights_b_stop(self.inputa_init[0])
+            weights_output = self.construct_weights()
+            weights_output(self.inputa_init[0])
 
 
 
