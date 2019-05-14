@@ -235,11 +235,14 @@ class MAML:
                 print('reuse!!!') 
                 training_scope.reuse_variables()
                 weights = self.weights
-                '''
+                
                 weights_a = self.weights_a
                 weights_b = self.weights_b
                 weights_output = self.weights_output
-		'''
+                
+                weights_a_stop = self.weights_a_stop
+                weights_b_stop = self.weights_b_stop
+		
             else:
                 print('it is fine')
                 # Define the weights /  weights stands for the model nueral_net!!!!!!!
