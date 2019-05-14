@@ -231,7 +231,8 @@ class MAML:
         
 	 #   print(self.labela)
         with tf.variable_scope('model', reuse=None) as training_scope:
-            if 'weights' in dir(self):   
+            if 'weights' in dir(self):  
+                print('reuse!!!') 
                 training_scope.reuse_variables()
                 weights = self.weights
                 '''
@@ -240,6 +241,7 @@ class MAML:
                 weights_output = self.weights_output
 		'''
             else:
+                print('it is fine')
                 # Define the weights /  weights stands for the model nueral_net!!!!!!!
                 # run models with array input to initialize models
                 #random.seed(7)
