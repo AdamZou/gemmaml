@@ -54,7 +54,7 @@ flags.DEFINE_float('meta_lr', 0.001, 'the base learning rate of the generator')
 flags.DEFINE_integer('update_batch_size', 10, 'number of examples used for inner gradient update (K for K-shot learning).')
 flags.DEFINE_float('update_lr', 1e-3, 'step size alpha for inner gradient update.') # 0.1 for omniglot
 flags.DEFINE_integer('num_updates', 1, 'number of inner gradient updates during training.')
-flags.DEFINE_string('meta_loss', 'val_loss', 'type of the meta loss functio.')
+flags.DEFINE_string('meta_loss', 'traditional_val_loss', 'type of the meta loss function.')
 flags.DEFINE_bool('one_sample', False, 'use the same sample for all training iterations or not')
 
 ## Model options
@@ -62,7 +62,7 @@ flags.DEFINE_string('norm', 'batch_norm', 'batch_norm, layer_norm, or None')
 flags.DEFINE_integer('num_filters', 64, 'number of filters for conv nets -- 32 for miniimagenet, 64 for omiglot.')
 flags.DEFINE_bool('conv', True, 'whether or not to use a convolutional network, only applicable in some cases')
 flags.DEFINE_bool('max_pool', False, 'Whether or not to use max pooling rather than strided convolutions')
-flags.DEFINE_bool('stop_grad', True, 'if True, do not use second derivatives in meta-optimization (for speed)')
+flags.DEFINE_bool('stop_grad',True, 'if True, do not use second derivatives in meta-optimization (for speed)')
 
 ## Logging, saving, and testing options
 flags.DEFINE_bool('log', True, 'if false, do not log summaries, for debugging code.')

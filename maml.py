@@ -280,11 +280,9 @@ class MAML:
                     except AttributeError:
                         continue
 
-            #set_prior(weights_a,weights)
-            #set_prior(weights_b,weights)
+            set_prior(weights_a,weights)
+            set_prior(weights_b,weights)
 
-            #self.weights_cp.layers[0].kernel_posterior=self.weights.layers[0].kernel_posterior
-            #self.weights_test[0].layers[0].kernel_posterior = tfd.Independent(tfd.Normal(loc=weights.layers[0].kernel_posterior.mean(),scale=0.000000001))
 
             def task_metalearn(inp, reuse=True):
                 """ Perform gradient descent for one task in the meta-batch. """
@@ -397,8 +395,8 @@ class MAML:
                     labels_distribution = tfd.Normal(loc=mean ,scale= self.sigma)
                 neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(labela, tf.float32)))
                 kl = sum(weights.losses) / tf.cast(tf.size(inputa), tf.float32)  #???
-                elbo_loss_a = neg_log_likelihood + kl
-                #elbo_loss_a = neg_log_likelihood  # kl is zero for the first gradient inner update
+                #elbo_loss_a = neg_log_likelihood + kl
+                elbo_loss_a = neg_log_likelihood  # kl is zero for the first gradient inner update
                 task_lossa_op = elbo_loss_a
                 grads_a = tf.gradients(elbo_loss_a, weights.trainable_weights)
                 if FLAGS.stop_grad:
