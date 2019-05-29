@@ -56,19 +56,6 @@ def reduce_var(x, axis=None, keepdims=False):
     return tf.reduce_mean(devs_squared, axis=axis, keep_dims=keepdims)
 
 def reduce_std(x, axis=None, keepdims=False):
-    """Standard deviation of a tensor, alongside the specified axis.
-
-    # Arguments
-        x: A tensor or variable.
-        axis: An integer, the axis to compute the standard deviation.
-        keepdims: A boolean, whether to keep the dimensions or not.
-            If `keepdims` is `False`, the rank of the tensor is reduced
-            by 1. If `keepdims` is `True`,
-            the reduced dimension is retained with length 1.
-
-    # Returns
-        A tensor with the standard deviation of elements of `x`.
-    """
     return tf.sqrt(reduce_var(x, axis=axis, keepdims=keepdims))
 
 FLAGS = flags.FLAGS
@@ -222,8 +209,6 @@ class MAML:
             self.weights_a_stop.append(weights_a_stop)
             self.weights_b_stop.append(weights_b_stop)
             self.weights_output.append(weights_output)
-
-
     	    weights_test = self.construct_weights()
             weights_test((self.inputa_init[0]).astype('float32'))
             self.weights_test.append(weights_test)
@@ -242,7 +227,6 @@ class MAML:
                 # Define the weights /  weights stands for the model nueral_net!!!!!!!
                 # run models with array input to initialize models
                 #random.seed(7)
-                #if FLAGS.datasource == 'sinusoid':
                 self.weights = weights = self.construct_weights()
                 weights(self.inputa_init[0])
 
@@ -272,6 +256,54 @@ class MAML:
             accuraciesb = [[]]*num_updates
 
 
+
+            def predict(NN,inputs):
+                logits=[]
+                for i in range(self.num_repeat):
+                    logits.append(NN(inputs))
+                mean = tf.reduce_mean(logits,0)
+                std = reduce_std(logits,0)
+                return mean, std
+
+            def deter(model_out,model):
+                for i, layer in enumerate(model_out.layers):
+                    try:
+                        layer.kernel_posterior = tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001))
+                        layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=model.layers[i].bias_posterior.mean()))
+                    except AttributeError:
+                        continue
+
+            def output_weights(model_out,fast_weights):
+                j=0
+                for i, layer in enumerate(model_out.layers):
+                    print(i,layer)
+                    print('j=',j)
+                    try:
+                        print(layer.kernel_posterior)
+                        layer.kernel_posterior = tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])))
+                        layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=fast_weights[j+2]))
+                        j+=3
+                        print('tfp')
+
+                    except AttributeError:
+                        '''
+                        layer.gamma = fast_weights[j]
+                        layer.beta = fast_weights[j+1]
+                        j+=2
+                        print('norm')
+                        '''
+                        continue
+
+            def neg_L(model, input, label):
+                mean = model(tf.cast(input, tf.float32))
+                if self.classification:
+                    labels_distribution = tfd.Categorical(logits=mean)
+                else:
+                    #labels_distribution = tfd.Normal(loc=mean ,scale= std) #???
+                    labels_distribution = tfd.Normal(loc=mean ,scale= self.sigma)
+                neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(label, tf.float32)))
+                return neg_log_likelihood
+
             def set_prior(model_out,model):
                 for i, layer in enumerate(model_out.layers):
                     try:
@@ -284,10 +316,13 @@ class MAML:
             set_prior(weights_b,weights)
 
 
+
             def task_metalearn(inp, reuse=True):
                 """ Perform gradient descent for one task in the meta-batch. """
                 inputa, inputb, labela, labelb = inp
                 task_outputbs, task_lossesb, task_lossesb_op = [], [], []
+                if self.classification:
+                    task_accuraciesb = []
                 '''
                 weights_a = self.weights_a[self.task_number]
                 weights_b = self.weights_b[self.task_number]
@@ -298,102 +333,21 @@ class MAML:
                 self.task_number = self.task_number + 1
                 '''
 
-                if self.classification:
-                    task_accuraciesb = []
                 # first gradient step
 
-                def predict(NN,inputs):
-                    logits=[]
-                    #print('num_repeat=',self.num_repeat)
-                    for i in range(self.num_repeat):
-                        logits.append(NN(inputs))
-                    mean = tf.reduce_mean(logits,0)
-                    std = reduce_std(logits,0)
-                    #print(mean,std)
-                    return mean, std
-
-                def deter(model_out,model):
-                    for i, layer in enumerate(model_out.layers):
-                        try:
-                            layer.kernel_posterior = tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001))
-                            layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=model.layers[i].bias_posterior.mean()))
-                        except AttributeError:
-                            continue
-
-                def output_weights(model_out,fast_weights):
-                    j=0
-                    for i, layer in enumerate(model_out.layers):
-                        print(i,layer)
-                        print('j=',j)
-                        try:
-                            print(layer.kernel_posterior)
-                            layer.kernel_posterior = tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])))
-                            layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=fast_weights[j+2]))
-                            j+=3
-                            print('tfp')
-
-                        except AttributeError:
-                            '''
-                            layer.gamma = fast_weights[j]
-                            layer.beta = fast_weights[j+1]
-                            j+=2
-                            print('norm')
-                            '''
-                            continue
-
-
-
                 # dumb_loss
-                mean_db , std_db = predict(weights,tf.concat([inputa,inputb],0))
-                #labels_distribution = tfd.Normal(loc=mean ,scale= std) #???
-                labels_distribution_db = tfd.Normal(loc=mean_db ,scale= self.sigma)
-                neg_log_likelihood_dumb = -tf.reduce_mean(labels_distribution_db.log_prob(tf.cast(tf.concat([labela,labelb],0), tf.float32)))
-
+                neg_log_likelihood_dumb = neg_L(weights, tf.concat([inputa,inputb],0) , tf.concat([labela,labelb],0))
                 #
 
-                if FLAGS.datasource == 'omniglot':
-                    channels = self.channels
-                    #inputa = tf.reshape(inputa, [-1, self.img_size, self.img_size, channels])
-                    #inputb = tf.reshape(inputb, [-1, self.img_size, self.img_size, channels])
-                if not self.classification:
-                    mean , std = predict(weights,inputa)
-
-                else:
-                    #print(tf.cast(inputa, tf.float32))
-                    mean = weights(tf.cast(inputa, tf.float32))
-
-                #deter(weights_output,weights)
-                #print('task_number=',self.task_number)
-                #self.weights_test[self.task_number-1].layers[0].kernel_posterior = tfd.Independent(tfd.Normal(loc=self.weights_cp.layers[0].kernel_posterior.mean(),scale=0.000000001))
-                #self.weights_test[self.task_number-1].layers[0].kernel_posterior = tfd.Independent(tfd.Normal(loc=self.weights.layers[0].kernel_posterior.mean(),scale=0.000000001))
-                '''
-                for i, layer in enumerate(self.weights_test[self.task_number-1].layers):
-                    try:
-                        self.weights_test[self.task_number-1].layers[i].kernel_posterior = tfd.Independent(tfd.Normal(loc=self.weights.layers[i].kernel_posterior.mean(),scale=0.00000000000000000000001))
-                        print('layer',i)
-                    except AttributeError:
-                        continue
-                '''
-
                 deter(weights_output,self.weights)
-                #self.inputa_check = self.inputa_test
                 task_outputa = weights_output(tf.cast(self.inputa[0], tf.float32))  #!!! maybe wrong
                 self.task_outputa = task_outputa #debug!!!!
                 self.task_outputa_test = self.weights(tf.cast(self.inputa[0], tf.float32))
-                #init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
-		#sess=tf.InteractiveSession()
-                #tf.global_variables_initializer().run()
-    		    #sess.run(init_op)
-                #print(sess.run(task_outputa))
+
                 task_lossa = self.loss_func(task_outputa, tf.cast(labela, tf.float32))
                 self.task_lossa = task_lossa # debug!!!!
 
-                if self.classification:
-                    labels_distribution = tfd.Categorical(logits=mean)
-                else:
-                    #labels_distribution = tfd.Normal(loc=mean ,scale= std) #???
-                    labels_distribution = tfd.Normal(loc=mean ,scale= self.sigma)
-                neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(labela, tf.float32)))
+                neg_log_likelihood = neg_L(weights,inputa,labela)
                 kl = sum(weights.losses) / tf.cast(tf.size(inputa), tf.float32)  #???
                 #elbo_loss_a = neg_log_likelihood + kl
                 elbo_loss_a = neg_log_likelihood  # kl is zero for the first gradient inner update
@@ -401,41 +355,12 @@ class MAML:
                 grads_a = tf.gradients(elbo_loss_a, weights.trainable_weights)
                 if FLAGS.stop_grad:
                     grads_a = [tf.stop_gradient(grad) for grad in grads_a]
-                self.grads_1 = grads_a #!!!!!!
 
-
-                '''
-                    if FLAGS.stop_grad:
-                        grads_a = [tf.stop_gradient(grad) for grad in grads]
-                    '''
-                # initialize
-                #weights_a(tf.cast(inputa, tf.float32))
-                #weights_b(tf.cast(inputa, tf.float32))
                 print('lr=',self.update_lr)
-                #self.update_lr = 0.1
-
                 fast_weights_a = [(weights.trainable_weights[i] - self.update_lr*grads_a[i]) for i in range(len(grads_a))]
-                #print(weights.trainable_variables)
-                '''
-                for i in range(len(true_weights_a)):
-                    #tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
-                    weights_a.trainable_weights[i] = true_weights_a[i]
-                '''
                 output_weights(weights_a,fast_weights_a)
 
-                #self.watw = weights_a.trainable_weights
-                #weights_a.trainable_weights = true_weights_a
-                #self.true_weights_a = true_weights_a # !!!!!!
-
-                #!!!!! debug
-
-
-
                 # posterior b
-                if not self.classification:
-                    mean , std = predict(weights_a,inputb)
-                else:
-                    mean = weights_a(tf.cast(inputb, tf.float32))
 
                 self.wa = weights_a  #!!!!!!!!
                 deter(weights_output,weights_a)
@@ -445,40 +370,19 @@ class MAML:
                 task_outputbs.append(task_outputb)  #!!!maybe wrong
                 task_lossesb.append(self.loss_func(task_outputb, tf.cast(labelb, tf.float32)))
                 self.lb = self.loss_func(task_outputb, tf.cast(labelb, tf.float32))   #!!!!!!
-                if self.classification:
-                    labels_distribution = tfd.Categorical(logits=mean)
-                else:
-                    #labels_distribution = tfd.Normal(loc=mean ,scale= std) #???
-                    labels_distribution = tfd.Normal(loc=mean ,scale= self.sigma)
-                neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(labelb, tf.float32)))
+
+                neg_log_likelihood = neg_L(weights_a,inputb,labelb)
 
                 kl = sum(weights_a.losses) / tf.cast(tf.size(inputb), tf.float32)  #???
                 elbo_loss_b = neg_log_likelihood + kl
-                #grads_b = tf.gradients(elbo_loss_b, weights_a.trainable_weights)
+
                 grads_b = tf.gradients(elbo_loss_b, fast_weights_a)
                 if FLAGS.stop_grad:
                     grads_b = [tf.stop_gradient(grad) for grad in grads_b]
                 fast_weights_b = [(fast_weights_a[i]  - self.update_lr*grads_b[i]) for i in range(len(grads_b))]     #!!!!!
-                '''
-                for i in range(len(true_weights_b)):
-                    #tf.assign(weights_b.trainable_variables[i] ,true_weights_b[i] )
-                    weights_b.trainable_weights[i] = true_weights_b[i]
-                '''
+
                 output_weights(weights_b,fast_weights_b)
 
-
-                '''
-                if (num_updates==1):
-                    for i in range(len(weights_a.trainable_variables)):
-                        #tf.assign(weights_a.trainable_variables[i] ,tf.stop_gradient(weights_a.trainable_variables[i]) )
-                        weights_a.trainable_variables[i] = tf.stop_gradient(weights_a.trainable_variables[i])
-                    for i in range(len(weights_a.trainable_variables)):
-                        #tf.assign(weights_a.trainable_variables[i] ,tf.stop_gradient(weights_a.trainable_variables[i]) )
-                        weights_b.trainable_variables[i] = tf.stop_gradient(weights_b.trainable_variables[i])
-                '''
-
-                #weights_a_s = [tf.stop_gradient(weight) for weight in weights_a]
-                #weights_b_s = [tf.stop_gradient(weight) for weight in weights_b]
                 fw_a_stop = [tf.stop_gradient(weight) for weight in fast_weights_a]
                 output_weights(weights_a_stop,fw_a_stop)
                 fw_b_stop = [tf.stop_gradient(weight) for weight in fast_weights_b]
@@ -506,203 +410,90 @@ class MAML:
                     meta_loss = sum(lossb_bq)
                 if FLAGS.meta_loss == 'val_loss':
                     meta_loss = neg_log_likelihood
-
+                #if FLAGS.meta_loss == 'val-tr':
+                #    meta_loss = neg_log_likelihood - neg_log_likelihood_tr
                 if FLAGS.meta_loss == 'traditional_val_loss':   # this one is true
                     meta_loss = neg_log_likelihood
-
                 if FLAGS.meta_loss == 'dumb_loss':
                     meta_loss = neg_log_likelihood_dumb
                 if FLAGS.meta_loss == 'bmaml_loss':
                     meta_loss = sum(lossb_ab_kl)
                 task_lossesb_op.append(meta_loss)
 
-                print('num_updates=',num_updates) #!!!!!!!!
+
+
                 # the rest gradient steps
+                print('num_updates=',num_updates) #!!!!!!!!
                 for j in range(num_updates-1):
                     # posterior a
 
-                    #logits = weights_a(tf.cast(inputa, tf.float32))
-                    if not self.classification:
-                        mean , std = predict(weights_a,inputa)
-                    else:
-                        mean = weights_a(tf.cast(inputa, tf.float32))
-
-                    if self.classification:
-                        labels_distribution = tfd.Categorical(logits=mean)
-                    else:
-                        #labels_distribution = tfd.Normal(loc=mean ,scale= std) #???
-                        labels_distribution = tfd.Normal(loc=mean ,scale= self.sigma)
-                    neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(labela, tf.float32)))
+                    neg_log_likelihood = neg_L(weights_a,inputa,labela)
                     # traditional val loss
-                    mean_tvl , std_tvl = predict(weights_a,inputb)
-                    labels_distribution_tvl = tfd.Normal(loc=mean_tvl ,scale= self.sigma)
-                    neg_log_likelihood_tvl = -tf.reduce_mean(labels_distribution_tvl.log_prob(tf.cast(labelb, tf.float32)))
-                    #
+                    neg_log_likelihood_tvl = neg_L(weights_a,inputb,labelb)
 
                     kl = sum(weights_a.losses) / tf.cast(tf.size(inputa), tf.float32)  #???
     	            elbo_loss_a = neg_log_likelihood + kl
-                    #grads_a = tf.gradients(elbo_loss_a, weights_a.trainable_weights)
                     grads_a = tf.gradients(elbo_loss_a, fast_weights_a)
                     if FLAGS.stop_grad:
                         grads_a = [tf.stop_gradient(grad) for grad in grads_a]
-                    #if FLAGS.stop_grad:
-                    #    grads_a = [tf.stop_gradient(grad) for grad in grads]
 
                     fast_weights_a = [(fast_weights_a[i] - self.update_lr*grads_a[i]) for i in range(len(grads_a))]
-                    '''
-                    for i in range(len(true_weights_a)):
-                        #tf.assign(weights_a.trainable_variables[i] ,true_weights_a[i] )
-                        weights_a.trainable_weights[i]=true_weights_a[i]
-     #               print('set weight successfully')
-                    '''
                     output_weights(weights_a,fast_weights_a)
 
-                    #output = tf.argmax(weights_a(tf.cast(inputb, tf.float32)), axis=1)
-                    if not self.classification:
-                        mean , std = predict(weights_a,inputb)
-                    else:
-                        mean = weights_a(tf.cast(inputb, tf.float32))
+
                     deter(weights_output,weights_a)
                     task_outputb = weights_output(tf.cast(inputb, tf.float32))
                     task_outputbs.append(task_outputb)  #!!!maybe wrong
-                    #task_outputbs.append(mean) #!!!maybe wrong
                     task_lossesb.append(self.loss_func(task_outputb, tf.cast(labelb, tf.float32)))
 
 
                     # posterior b
-                    #logits = weights_b(tf.cast(tf.concat([inputa,inputb],0), tf.float32))
-                    #mean , std = predict(weights_b,tf.concat([inputa,inputb],0))
-                    if FLAGS.meta_loss != 'bmaml_loss':
 
-                        if self.classification:
-                            #mean , std = predict(weights_b,inputa)
-                            mean = weights_b(tf.cast(inputa, tf.float32))
-                            labels_distribution_a = tfd.Categorical(logits=mean)
-                            neg_log_likelihood_a = -tf.reduce_mean(labels_distribution_a.log_prob(tf.cast(labela, tf.float32)))
-                            #mean , std = predict(weights_b,inputb)
-                            mean = weights_b(tf.cast(inputb, tf.float32))
-                            labels_distribution_b = tfd.Categorical(logits=mean)
-                            neg_log_likelihood_b = -tf.reduce_mean(labels_distribution_b.log_prob(tf.cast(labelb, tf.float32)))
-                            neg_log_likelihood = neg_log_likelihood_a + neg_log_likelihood_b
+                    neg_log_likelihood = neg_L(weights_b, tf.concat([inputa,inputb],0) , tf.concat([labela,labelb],0))
+                    kl = sum(weights_b.losses) / tf.cast(tf.size(inputa)+tf.size(inputb), tf.float32)  #???
+                    elbo_loss_b = neg_log_likelihood + kl
+                    grads_b = tf.gradients(elbo_loss_b, fast_weights_b)
+                    if FLAGS.stop_grad:
+                        grads_b = [tf.stop_gradient(grad) for grad in grads_b]
+                    fast_weights_b = [(fast_weights_b[i]  - self.update_lr*grads_b[i]) for i in range(len(grads_b))]
 
-                        else:
-                            mean , std = predict(weights_b,tf.concat([inputa,inputb],0))
-                            #labels_distribution = tfd.Normal(loc=mean ,scale= std) #???
-                            labels_distribution = tfd.Normal(loc=mean ,scale= self.sigma)
-                            neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(tf.concat([labela,labelb],0), tf.float32)))
+                    output_weights(weights_b,fast_weights_b)
 
-                        kl = sum(weights_b.losses) / tf.cast(tf.size(inputa)+tf.size(inputb), tf.float32)  #???
-                        elbo_loss_b = neg_log_likelihood + kl
-                        grads_b = tf.gradients(elbo_loss_b, fast_weights_b)
-                        if FLAGS.stop_grad:
-                            grads_b = [tf.stop_gradient(grad) for grad in grads_b]
-                        fast_weights_b = [(fast_weights_b[i]  - self.update_lr*grads_b[i]) for i in range(len(grads_b))]
-                        '''
-                        for i in range(len(true_weights_b)):
-                            #tf.assign(weights_b.trainable_variables[i] ,true_weights_b[i] )
-                            weights_b.trainable_weights[i]=true_weights_b[i]
-                        '''
-                        output_weights(weights_b,fast_weights_b)
+                    fw_a_stop = [tf.stop_gradient(weight) for weight in fast_weights_a]
+                    output_weights(weights_a_stop,fw_a_stop)
+                    fw_b_stop = [tf.stop_gradient(weight) for weight in fast_weights_b]
+                    output_weights(weights_b_stop,fw_b_stop)
 
+                    lossb_abq = []
+                    lossb_ab_kl =[]
+                    lossb_bq =[]
 
-    #                    weights_a = [tf.stop_gradient(weight) for weight in weights_a]
-    #                    weights_b = [tf.stop_gradient(weight) for weight in weights_b]
-                        '''
-                        if j == (num_updates-2):
-                            for i in range(len(weights_a.trainable_variables)):
-                                #tf.assign(weights_a.trainable_variables[i] ,tf.stop_gradient(weights_a.trainable_variables[i]) )
-                                weights_a.trainable_variables[i] = tf.stop_gradient(weights_a.trainable_variables[i])
-                            for i in range(len(weights_a.trainable_variables)):
-                                #tf.assign(weights_a.trainable_variables[i] ,tf.stop_gradient(weights_a.trainable_variables[i]) )
-                                weights_b.trainable_variables[i] = tf.stop_gradient(weights_b.trainable_variables[i])
-                        '''
-                        fw_a_stop = [tf.stop_gradient(weight) for weight in fast_weights_a]
-                        output_weights(weights_a_stop,fw_a_stop)
-                        fw_b_stop = [tf.stop_gradient(weight) for weight in fast_weights_b]
-                        output_weights(weights_b_stop,fw_b_stop)
+                    for i, layer in enumerate(weights.layers):
+                        try:
+                            #q = layer.kernel_posterior
+                            q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()))
+                            lossb_abq.append( - weights_a_stop.layers[i].kernel_posterior.cross_entropy(q) + weights_b_stop.layers[i].kernel_posterior.cross_entropy(q) )
+                            lossb_ab_kl.append(weights_b_stop.layers[i].kernel_posterior.kl_divergence(weights_a.layers[i].kernel_posterior) )
+                            lossb_bq.append(weights_b_stop.layers[i].kernel_posterior.cross_entropy(q))
+                        except AttributeError:
+                            continue
 
-                        lossb_abq = []
-                        lossb_ab_kl =[]
-                        lossb_bq =[]
-
-                        for i, layer in enumerate(weights.layers):
-                            try:
-                                #q = layer.kernel_posterior
-                                q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()))
-                                lossb_abq.append( - weights_a_stop.layers[i].kernel_posterior.cross_entropy(q) + weights_b_stop.layers[i].kernel_posterior.cross_entropy(q) )
-                                lossb_ab_kl.append(weights_b_stop.layers[i].kernel_posterior.kl_divergence(weights_a.layers[i].kernel_posterior) )
-                                lossb_bq.append(weights_b_stop.layers[i].kernel_posterior.cross_entropy(q))
-                            except AttributeError:
-                                continue
-
-                        if FLAGS.meta_loss == 'chaser_loss':
-                            meta_loss = sum(lossb_abq)
-                        if FLAGS.meta_loss == 'chaser_loss_kl':
-                            meta_loss = sum(lossb_ab_kl)
-                        if FLAGS.meta_loss == 'mix_effect':
-                            meta_loss = sum(lossb_bq)
-                        if FLAGS.meta_loss == 'val_loss':
-                            meta_loss = neg_log_likelihood
-                        if FLAGS.meta_loss == 'traditional_val_loss':
-                            meta_loss = neg_log_likelihood_tvl
-                        if FLAGS.meta_loss == 'dumb_loss':
-                            meta_loss = neg_log_likelihood_dumb
-
-                        task_lossesb_op.append(meta_loss)
-
-                if FLAGS.meta_loss == 'bmaml_loss':
-                    output_weights(weights_b,fast_weights_a)
-                    fast_weights_b = fast_weights_a
-                    for k in range(num_updates-1):
-
-                        if not self.classification:
-                            mean , std = predict(weights_b,inputb)
-                        else:
-                            mean = weights_b(tf.cast(inputb, tf.float32))
-
-                        deter(weights_output,weights_b)
-
-                        task_outputb = weights_output(tf.cast(inputb, tf.float32))
-
-                        task_outputbs.append(task_outputb)  #!!!maybe wrong
-                        task_lossesb.append(self.loss_func(task_outputb, tf.cast(labelb, tf.float32)))
-
-                        if self.classification:
-                            labels_distribution = tfd.Categorical(logits=mean)
-                        else:
-                            #labels_distribution = tfd.Normal(loc=mean ,scale= std) #???
-                            labels_distribution = tfd.Normal(loc=mean ,scale= self.sigma)
-                        neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(labelb, tf.float32)))
-                        kl = sum(weights_a.losses) / tf.cast(tf.size(inputb), tf.float32)  #???
-                        elbo_loss_b = neg_log_likelihood + kl
-                        #grads_b = tf.gradients(elbo_loss_b, weights_a.trainable_weights)
-                        grads_b = tf.gradients(elbo_loss_b, fast_weights_a)
-                        fast_weights_b = [(fast_weights_b[i]  - self.update_lr*grads_b[i]) for i in range(len(grads_b))]     #!!!!!
-
-                        output_weights(weights_b,fast_weights_b)
-
-                        fw_a_stop = [tf.stop_gradient(weight) for weight in fast_weights_a]
-                        output_weights(weights_a_stop,fw_a_stop)
-                        fw_b_stop = [tf.stop_gradient(weight) for weight in fast_weights_b]
-                        output_weights(weights_b_stop,fw_b_stop)
-
-                        lossb_abq = []
-                        lossb_ab_kl =[]
-                        lossb_bq =[]
-
-                        for i, layer in enumerate(weights.layers):
-                            try:
-                                #q = layer.kernel_posterior
-                                q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()))
-                                lossb_abq.append( - weights_a_stop.layers[i].kernel_posterior.cross_entropy(q) + weights_b_stop.layers[i].kernel_posterior.cross_entropy(q) )
-                                lossb_ab_kl.append(weights_b_stop.layers[i].kernel_posterior.kl_divergence(weights_a.layers[i].kernel_posterior) )
-                                lossb_bq.append(weights_b_stop.layers[i].kernel_posterior.cross_entropy(q))
-                            except AttributeError:
-                                continue
-
+                    if FLAGS.meta_loss == 'chaser_loss':
                         meta_loss = sum(lossb_abq)
-                        task_lossesb_op.append(meta_loss)
+                    if FLAGS.meta_loss == 'chaser_loss_kl':
+                        meta_loss = sum(lossb_ab_kl)
+                    if FLAGS.meta_loss == 'mix_effect':
+                        meta_loss = sum(lossb_bq)
+                    if FLAGS.meta_loss == 'val_loss':
+                        meta_loss = neg_log_likelihood
+                    #if FLAGS.meta_loss == 'val-tr':
+                    #    meta_loss = neg_log_likelihood - neg_log_likelihood_tr
+                    if FLAGS.meta_loss == 'traditional_val_loss':
+                        meta_loss = neg_log_likelihood_tvl
+                    if FLAGS.meta_loss == 'dumb_loss':
+                        meta_loss = neg_log_likelihood_dumb
 
+                    task_lossesb_op.append(meta_loss)
 
                 self.outb_last=task_outputb    #!!!!!!!!!
                 task_output = [task_outputa, task_outputbs, task_lossa, task_lossesb, task_lossa_op, task_lossesb_op ]
