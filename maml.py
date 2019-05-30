@@ -249,6 +249,7 @@ class MAML:
                 mean = model(tf.cast(input, tf.float32))
                 if self.classification:
                     labels_distribution = tfd.Categorical(logits=mean)
+                    label = tf.argmax(label, axis=1)
                 else:
                     #labels_distribution = tfd.Normal(loc=mean ,scale= std) #???
                     labels_distribution = tfd.Normal(loc=mean ,scale= self.sigma)
@@ -275,98 +276,15 @@ class MAML:
                 if self.classification:
                     task_accuraciesb = []
 
-                # first gradient step
-                '''
-                deter(weights_output,self.weights)
-                task_outputa = weights_output(tf.cast(self.inputa[0], tf.float32))  #!!! maybe wrong
-                self.task_outputa = task_outputa #debug!!!!
-                self.task_outputa_test = self.weights(tf.cast(self.inputa[0], tf.float32))
 
-                task_lossa = self.loss_func(task_outputa, tf.cast(labela, tf.float32))
-                self.task_lossa = task_lossa # debug!!!!
-
-                neg_log_likelihood = neg_L(weights,inputa,labela)
-                kl = sum(weights.losses) / tf.cast(tf.size(inputa), tf.float32)  #???
-                #elbo_loss_a = neg_log_likelihood + kl
-                elbo_loss_a = neg_log_likelihood  # kl is zero for the first gradient inner update
-                task_lossa_op = elbo_loss_a
-                grads_a = tf.gradients(elbo_loss_a, weights.trainable_weights)
-                if FLAGS.stop_grad:
-                    grads_a = [tf.stop_gradient(grad) for grad in grads_a]
-
-                print('lr=',self.update_lr)
-                fast_weights_a = [(weights.trainable_weights[i] - self.update_lr*grads_a[i]) for i in range(len(grads_a))]
-                output_weights(weights_a,fast_weights_a)
-
-                # posterior b
-
-                self.wa = weights_a  #!!!!!!!!
-                deter(weights_output,weights_a)
-                self.wo = weights_output   #!!!!!!
-                task_outputb = weights_output(tf.cast(inputb, tf.float32))
-                self.outb = task_outputb #!!!!!
-                task_outputbs.append(task_outputb)  #!!!maybe wrong
-                task_lossesb.append(self.loss_func(task_outputb, tf.cast(labelb, tf.float32)))
-                self.lb = self.loss_func(task_outputb, tf.cast(labelb, tf.float32))   #!!!!!!
-
-                neg_log_likelihood = neg_L(weights_a,inputb,labelb)
-
-                kl = sum(weights_a.losses) / tf.cast(tf.size(inputb), tf.float32)  #???
-                elbo_loss_b = neg_log_likelihood + kl
-
-                grads_b = tf.gradients(elbo_loss_b, fast_weights_a)
-                if FLAGS.stop_grad:
-                    grads_b = [tf.stop_gradient(grad) for grad in grads_b]
-                fast_weights_b = [(fast_weights_a[i]  - self.update_lr*grads_b[i]) for i in range(len(grads_b))]     #!!!!!
-
-                output_weights(weights_b,fast_weights_b)
-
-                fw_a_stop = [tf.stop_gradient(weight) for weight in fast_weights_a]
-                output_weights(weights_a_stop,fw_a_stop)
-                fw_b_stop = [tf.stop_gradient(weight) for weight in fast_weights_b]
-                output_weights(weights_b_stop,fw_b_stop)
-
-                lossb_abq = []
-                lossb_ab_kl =[]
-                lossb_bq =[]
-
-                for i, layer in enumerate(weights.layers):
-                    try:
-                        #q = layer.kernel_posterior
-                        q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()))
-                        lossb_abq.append( - weights_a_stop.layers[i].kernel_posterior.cross_entropy(q) + weights_b_stop.layers[i].kernel_posterior.cross_entropy(q) )
-                        lossb_ab_kl.append(weights_b_stop.layers[i].kernel_posterior.kl_divergence(weights_a.layers[i].kernel_posterior) )
-                        lossb_bq.append(weights_b_stop.layers[i].kernel_posterior.cross_entropy(q))
-                    except AttributeError:
-                        continue
-
-                if FLAGS.meta_loss == 'chaser_loss':
-                    meta_loss = sum(lossb_abq)
-                if FLAGS.meta_loss == 'chaser_loss_kl':
-                    meta_loss = sum(lossb_ab_kl)
-                if FLAGS.meta_loss == 'mix_effect':
-                    meta_loss = sum(lossb_bq)
-                if FLAGS.meta_loss == 'val_loss':
-                    meta_loss = neg_log_likelihood
-                #if FLAGS.meta_loss == 'val-tr':
-                #    meta_loss = neg_log_likelihood - neg_log_likelihood_tr
-                if FLAGS.meta_loss == 'traditional_val_loss':   # this one is true
-                    meta_loss = neg_log_likelihood
-                if FLAGS.meta_loss == 'dumb_loss':
-                    meta_loss = neg_log_likelihood_dumb
-                if FLAGS.meta_loss == 'bmaml_loss':
-                    meta_loss = sum(lossb_ab_kl)
-                task_lossesb_op.append(meta_loss)
-                '''
-
-                # the rest gradient steps
                 # initialize weights_a , fast_weights_a, weights_b, fast_weights_b
                 fast_weights_a = weights.trainable_weights
                 fast_weights_b = weights.trainable_weights
                 output_weights(weights_a,fast_weights_a)
                 output_weights(weights_b,fast_weights_b)
                 # dumb_loss
-                neg_log_likelihood_dumb = neg_L(weights, tf.concat([inputa,inputb],0) , tf.concat([labela,labelb],0))
+                neg_log_likelihood_dumb_b = neg_L(weights, tf.concat([inputa,inputb],0) , tf.concat([labela,labelb],0))
+                neg_log_likelihood_dumb_a = neg_L(weights, inputa , labela)
                 # output and loss for initial state
                 deter(weights_output,weights_a)
                 task_output = weights_output(tf.cast(inputb, tf.float32))
@@ -440,11 +358,13 @@ class MAML:
                     if FLAGS.meta_loss == 'b':
                         meta_loss = neg_log_likelihood_b
                     if FLAGS.meta_loss == 'b-a':
-                        meta_loss = -(neg_log_likelihood_b - neg_log_likelihood_a)
+                        meta_loss = neg_log_likelihood_b - neg_log_likelihood_a
                     if FLAGS.meta_loss == 'b*a':
                         meta_loss = neg_log_likelihood_cross
                     if FLAGS.meta_loss == 'dumb_loss':
-                        meta_loss = neg_log_likelihood_dumb
+                        meta_loss = neg_log_likelihood_dumb_b
+                    if FLAGS.meta_loss == 'dumb_b-a':
+                        meta_loss = -(neg_log_likelihood_dumb_b - neg_log_likelihood_dumb_a)
                     task_lossesb_op.append(meta_loss)
                 # end for
                 #self.outb_last=task_outputb    #!!!!!!!!!
