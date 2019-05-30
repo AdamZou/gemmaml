@@ -162,59 +162,10 @@ class MAML:
 
         self.sigma = FLAGS.sigma
         self.num_repeat = FLAGS.num_repeat
-        '''
-        self.inputa = input_tensors['inputa']
-        self.inputb = input_tensors['inputb'] #  !!!!!debug
-        self.labela = input_tensors['labela']
-        self.labelb = input_tensors['labelb'] #  !!!!!debug
 
-
-        #self.inputa_test = self.inputa
-        if FLAGS.train:
-            self.inputa_test = self.inputa
-        else:
-            self.inputa_test = tf.placeholder(tf.float32)
-            self.inputb = tf.placeholder(tf.float32)
-            self.labela = tf.placeholder(tf.float32)
-            self.labelb = tf.placeholder(tf.float32)
-
-        '''
-        #print(self.inputa.shape)
-        #print(self.labela.shape)
-        #print(self.inputa[:,1,:])
-        #print(self.inputa[1])
-
-        #N_task = self.inputa.shape[0]
-        #self.task_number=0
-        #self.weights_a, self.weights_b, self.weights_output = [],[],[]
-        #self.weights_a_stop, self.weights_b_stop = [],[]
-        #task_number = np.array(range(N_task))
-	#print('N_task=',N_task)
         N_task=FLAGS.meta_batch_size
         print('N_task=',N_task)
-        '''
-        for i in range(N_task):
-            weights_a = self.construct_weights()
-            weights_a((self.inputa_init[0]).astype('float32'))
-            weights_b = self.construct_weights()
-            weights_b((self.inputa_init[0]).astype('float32'))
-            weights_a_stop = self.construct_weights()
-            weights_a_stop((self.inputa_init[0]).astype('float32'))
-            weights_b_stop = self.construct_weights()
-            weights_b_stop((self.inputa_init[0]).astype('float32'))
-            weights_output = self.construct_weights()
-            weights_output((self.inputa_init[0]).astype('float32'))
-            self.weights_a.append(weights_a)
-            self.weights_b.append(weights_b)
-            self.weights_a_stop.append(weights_a_stop)
-            self.weights_b_stop.append(weights_b_stop)
-            self.weights_output.append(weights_output)
-    	    weights_test = self.construct_weights()
-            weights_test((self.inputa_init[0]).astype('float32'))
-            self.weights_test.append(weights_test)
-        '''
 
-	 #   print(self.labela)
         with tf.variable_scope('model', reuse=None) as training_scope:
             if 'weights' in dir(self):
                 print('reuse!!!')
@@ -323,22 +274,9 @@ class MAML:
                 task_outputbs, task_lossesb, task_lossesb_op = [], [], []
                 if self.classification:
                     task_accuraciesb = []
-                '''
-                weights_a = self.weights_a[self.task_number]
-                weights_b = self.weights_b[self.task_number]
-                weights_a_stop = self.weights_a_stop[self.task_number]
-                weights_b_stop = self.weights_b_stop[self.task_number]
-                weights_output = self.weights_output[self.task_number]
-                #weights_test=self.weights_test[self.task_number]
-                self.task_number = self.task_number + 1
-                '''
 
                 # first gradient step
-
-                # dumb_loss
-                neg_log_likelihood_dumb = neg_L(weights, tf.concat([inputa,inputb],0) , tf.concat([labela,labelb],0))
-                #
-
+                '''
                 deter(weights_output,self.weights)
                 task_outputa = weights_output(tf.cast(self.inputa[0], tf.float32))  #!!! maybe wrong
                 self.task_outputa = task_outputa #debug!!!!
@@ -419,20 +357,36 @@ class MAML:
                 if FLAGS.meta_loss == 'bmaml_loss':
                     meta_loss = sum(lossb_ab_kl)
                 task_lossesb_op.append(meta_loss)
-
-
+                '''
 
                 # the rest gradient steps
+                # initialize weights_a , fast_weights_a, weights_b, fast_weights_b
+                fast_weights_a = weights.trainable_weights
+                fast_weights_b = weights.trainable_weights
+                output_weights(weights_a,fast_weights_a)
+                output_weights(weights_b,fast_weights_b)
+                # dumb_loss
+                neg_log_likelihood_dumb = neg_L(weights, tf.concat([inputa,inputb],0) , tf.concat([labela,labelb],0))
+                # output and loss for initial state
+                deter(weights_output,weights_a)
+                task_output = weights_output(tf.cast(inputb, tf.float32))
+                task_outputa = task_output
+                task_lossa = self.loss_func(task_output, tf.cast(labelb, tf.float32))
+
+
                 print('num_updates=',num_updates) #!!!!!!!!
-                for j in range(num_updates-1):
+                for j in range(num_updates):
                     # posterior a
 
-                    neg_log_likelihood = neg_L(weights_a,inputa,labela)
+                    neg_log_likelihood_a = neg_L(weights_a,inputa,labela)
                     # traditional val loss
-                    neg_log_likelihood_tvl = neg_L(weights_a,inputb,labelb)
+                    neg_log_likelihood_cross = neg_L(weights_a,inputb,labelb)
 
                     kl = sum(weights_a.losses) / tf.cast(tf.size(inputa), tf.float32)  #???
-    	            elbo_loss_a = neg_log_likelihood + kl
+    	            elbo_loss_a = neg_log_likelihood_a + kl
+                    if j==0:
+                        task_lossa_op = elbo_loss_a
+
                     grads_a = tf.gradients(elbo_loss_a, fast_weights_a)
                     if FLAGS.stop_grad:
                         grads_a = [tf.stop_gradient(grad) for grad in grads_a]
@@ -440,25 +394,24 @@ class MAML:
                     fast_weights_a = [(fast_weights_a[i] - self.update_lr*grads_a[i]) for i in range(len(grads_a))]
                     output_weights(weights_a,fast_weights_a)
 
-
                     deter(weights_output,weights_a)
-                    task_outputb = weights_output(tf.cast(inputb, tf.float32))
-                    task_outputbs.append(task_outputb)  #!!!maybe wrong
-                    task_lossesb.append(self.loss_func(task_outputb, tf.cast(labelb, tf.float32)))
-
+                    task_output = weights_output(tf.cast(inputb, tf.float32))
+                    task_outputbs.append(task_output)  #
+                    task_lossesb.append(self.loss_func(task_output, tf.cast(labelb, tf.float32)))
 
                     # posterior b
 
-                    neg_log_likelihood = neg_L(weights_b, tf.concat([inputa,inputb],0) , tf.concat([labela,labelb],0))
+                    neg_log_likelihood_b = neg_L(weights_b, tf.concat([inputa,inputb],0) , tf.concat([labela,labelb],0))
                     kl = sum(weights_b.losses) / tf.cast(tf.size(inputa)+tf.size(inputb), tf.float32)  #???
-                    elbo_loss_b = neg_log_likelihood + kl
+                    elbo_loss_b = neg_log_likelihood_b + kl
                     grads_b = tf.gradients(elbo_loss_b, fast_weights_b)
                     if FLAGS.stop_grad:
                         grads_b = [tf.stop_gradient(grad) for grad in grads_b]
                     fast_weights_b = [(fast_weights_b[i]  - self.update_lr*grads_b[i]) for i in range(len(grads_b))]
-
                     output_weights(weights_b,fast_weights_b)
 
+
+                    # define the loss op
                     fw_a_stop = [tf.stop_gradient(weight) for weight in fast_weights_a]
                     output_weights(weights_a_stop,fw_a_stop)
                     fw_b_stop = [tf.stop_gradient(weight) for weight in fast_weights_b]
@@ -484,18 +437,17 @@ class MAML:
                         meta_loss = sum(lossb_ab_kl)
                     if FLAGS.meta_loss == 'mix_effect':
                         meta_loss = sum(lossb_bq)
-                    if FLAGS.meta_loss == 'val_loss':
-                        meta_loss = neg_log_likelihood
-                    #if FLAGS.meta_loss == 'val-tr':
-                    #    meta_loss = neg_log_likelihood - neg_log_likelihood_tr
-                    if FLAGS.meta_loss == 'traditional_val_loss':
-                        meta_loss = neg_log_likelihood_tvl
+                    if FLAGS.meta_loss == 'b':
+                        meta_loss = neg_log_likelihood_b
+                    if FLAGS.meta_loss == 'b-a':
+                        meta_loss = -(neg_log_likelihood_b - neg_log_likelihood_a)
+                    if FLAGS.meta_loss == 'b*a':
+                        meta_loss = neg_log_likelihood_cross
                     if FLAGS.meta_loss == 'dumb_loss':
                         meta_loss = neg_log_likelihood_dumb
-
                     task_lossesb_op.append(meta_loss)
-
-                self.outb_last=task_outputb    #!!!!!!!!!
+                # end for
+                #self.outb_last=task_outputb    #!!!!!!!!!
                 task_output = [task_outputa, task_outputbs, task_lossa, task_lossesb, task_lossa_op, task_lossesb_op ]
 
                 if self.classification:
@@ -514,11 +466,10 @@ class MAML:
 #                unused = task_metalearn((self.inputa[0], self.inputb[0], self.labela[0], self.labelb[0]), False)
 
             out_dtype = [tf.float32, [tf.float32]*num_updates, tf.float32, [tf.float32]*num_updates , tf.float32, [tf.float32]*num_updates]
-            #out_dtype = [ tf.float32, tf.float32 ]
+
             if self.classification:
                 out_dtype.extend([tf.float32, [tf.float32]*num_updates])
             #result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb), dtype=out_dtype, parallel_iterations=FLAGS.meta_batch_size)
-            #result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb), dtype=out_dtype)
 
             outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op, accuraciesa, accuraciesb = [None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task, [None]*N_task
             for i in range(N_task):
@@ -532,28 +483,8 @@ class MAML:
             self.outputbs = outputbs
             self.lossesa = lossesa
             self.lossesb = lossesb
-            #print(lossesb)
-            '''
-            lossesb = np.transpose(np.array(lossesb))
-            lossesb_op = np.transpose(np.array(lossesb_op))
-            outputbs = np.transpose(np.array(outputbs))
+            #result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb, task_number), dtype=out_dtype, parallel_iterations=FLAGS.meta_batch_size)
 
-            lossesb = lossesb[0]
-            lossesb_op = lossesb_op[0]
-            outputbs = outputbs[0]
-            '''
-            #lossesb = [list(i) for i in zip(*lossesb)]
-
-            #print(lossesb[0])
-
-            '''
-            result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb, task_number), dtype=out_dtype, parallel_iterations=FLAGS.meta_batch_size)
-
-            if self.classification:
-                outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op, accuraciesa, accuraciesb = result
-            else:
-                outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op  = result
-            '''
 
         ## Performance & Optimization
         print('num_updates=',num_updates,'\n')
