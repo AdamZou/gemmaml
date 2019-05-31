@@ -294,12 +294,12 @@ class MAML:
 
                 print('num_updates=',num_updates) #!!!!!!!!
                 for j in range(num_updates):
-                    # posterior a
 
-                    neg_log_likelihood_a = neg_L(weights_a,inputa,labela)
                     # traditional val loss
                     neg_log_likelihood_cross = neg_L(weights_a,inputb,labelb)
 
+                    # posterior a
+                    neg_log_likelihood_a = neg_L(weights_a,inputa,labela)
                     kl = sum(weights_a.losses) / tf.cast(tf.size(inputa), tf.float32)  #???
     	            elbo_loss_a = neg_log_likelihood_a + kl
                     if j==0:
@@ -338,22 +338,27 @@ class MAML:
                     lossb_abq = []
                     lossb_ab_kl =[]
                     lossb_bq =[]
+                    lossb_ab_xe=[]
 
                     for i, layer in enumerate(weights.layers):
                         try:
                             #q = layer.kernel_posterior
                             q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()))
                             lossb_abq.append( - weights_a_stop.layers[i].kernel_posterior.cross_entropy(q) + weights_b_stop.layers[i].kernel_posterior.cross_entropy(q) )
-                            lossb_ab_kl.append(weights_b_stop.layers[i].kernel_posterior.kl_divergence(weights_a.layers[i].kernel_posterior) )
+                            lossb_ab_kl.append(weights_b_stop.layers[i].kernel_posterior.kl_divergence(weights_a.layers[i].kernel_posterior))
                             lossb_bq.append(weights_b_stop.layers[i].kernel_posterior.cross_entropy(q))
+                            lossb_ab_xe.append(weights_b_stop.layers[i].kernel_posterior.cross_entropy(weights_a.layers[i].kernel_posterior))
                         except AttributeError:
                             continue
 
-                    if FLAGS.meta_loss == 'chaser_loss':
+
+                    if FLAGS.meta_loss == 'abq':
                         meta_loss = sum(lossb_abq)
-                    if FLAGS.meta_loss == 'chaser_loss_kl':
+                    if FLAGS.meta_loss == 'ab_kl':
                         meta_loss = sum(lossb_ab_kl)
-                    if FLAGS.meta_loss == 'mix_effect':
+                    if FLAGS.meta_loss == 'ab_xe':
+                        meta_loss = sum(lossb_ab_xe)
+                    if FLAGS.meta_loss == 'bq':
                         meta_loss = sum(lossb_bq)
                     if FLAGS.meta_loss == 'b':
                         meta_loss = neg_log_likelihood_b
