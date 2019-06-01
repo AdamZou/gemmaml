@@ -125,7 +125,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
                 feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb}
 
         if itr < FLAGS.pretrain_iterations:
-	    input_tensors = [model.pretrain_op]
+	        input_tensors = [model.pretrain_op]
         else:
 ##### metatrain_op
             input_tensors = [model.metatrain_op]

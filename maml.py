@@ -256,6 +256,21 @@ class MAML:
                 neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(label, tf.float32)))
                 return neg_log_likelihood
 
+
+            def apply_grad(model, fast_weights, input, label):
+                neg_log_likelihood = neg_L(model, input , label)
+                kl = sum(model.losses) / tf.cast(tf.size(input), tf.float32)  #???
+                elbo_loss = neg_log_likelihood + kl
+                grads = tf.gradients(elbo_loss, fast_weights)
+                if FLAGS.stop_grad:
+                    grads = [tf.stop_gradient(grad) for grad in grads]
+                #fast_weights = [(fast_weights[i]  - self.update_lr*grads[i]) for i in range(len(grads))]
+                for i in range(len(grads)):
+                    fast_weights[i] = (fast_weights[i]  - self.update_lr*grads[i])
+                output_weights(model,fast_weights)
+
+
+
             def set_prior(model_out,model):
                 for i, layer in enumerate(model_out.layers):
                     try:
@@ -291,14 +306,14 @@ class MAML:
                 task_outputa = task_output
                 task_lossa = self.loss_func(task_output, tf.cast(labelb, tf.float32))
 
+                # task_lossa_op
+                task_lossa_op = neg_L(weights_a,inputa,labela)
 
                 print('num_updates=',num_updates) #!!!!!!!!
                 for j in range(num_updates):
 
-                    # traditional val loss
-                    neg_log_likelihood_cross = neg_L(weights_a,inputb,labelb)
-
                     # posterior a
+                    '''
                     neg_log_likelihood_a = neg_L(weights_a,inputa,labela)
                     kl = sum(weights_a.losses) / tf.cast(tf.size(inputa), tf.float32)  #???
     	            elbo_loss_a = neg_log_likelihood_a + kl
@@ -311,6 +326,11 @@ class MAML:
 
                     fast_weights_a = [(fast_weights_a[i] - self.update_lr*grads_a[i]) for i in range(len(grads_a))]
                     output_weights(weights_a,fast_weights_a)
+                    '''
+                    apply_grad(weights_a,fast_weights_a,inputa,labela)
+
+                    # traditional val loss
+                    neg_log_likelihood_cross = neg_L(weights_a,inputb,labelb)
 
                     deter(weights_output,weights_a)
                     task_output = weights_output(tf.cast(inputb, tf.float32))
@@ -318,7 +338,7 @@ class MAML:
                     task_lossesb.append(self.loss_func(task_output, tf.cast(labelb, tf.float32)))
 
                     # posterior b
-
+                    '''
                     neg_log_likelihood_b = neg_L(weights_b, tf.concat([inputa,inputb],0) , tf.concat([labela,labelb],0))
                     kl = sum(weights_b.losses) / tf.cast(tf.size(inputa)+tf.size(inputb), tf.float32)  #???
                     elbo_loss_b = neg_log_likelihood_b + kl
@@ -327,7 +347,8 @@ class MAML:
                         grads_b = [tf.stop_gradient(grad) for grad in grads_b]
                     fast_weights_b = [(fast_weights_b[i]  - self.update_lr*grads_b[i]) for i in range(len(grads_b))]
                     output_weights(weights_b,fast_weights_b)
-
+                    '''
+                    apply_grad(weights_b,fast_weights_b,tf.concat([inputa,inputb],0),tf.concat([labela,labelb],0))
 
                     # define the loss op
                     fw_a_stop = [tf.stop_gradient(weight) for weight in fast_weights_a]
