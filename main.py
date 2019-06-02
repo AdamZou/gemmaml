@@ -56,6 +56,7 @@ flags.DEFINE_float('update_lr', 1e-3, 'step size alpha for inner gradient update
 flags.DEFINE_integer('num_updates', 1, 'number of inner gradient updates during training.')
 flags.DEFINE_string('meta_loss', 'b*a', 'type of the meta loss function.')
 flags.DEFINE_bool('one_sample', False, 'use the same sample for all training iterations or not')
+flags.DEFINE_bool('setseed', True, 'use the same seed in one loop')
 
 ## Model options
 flags.DEFINE_string('norm', 'batch_norm', 'batch_norm, layer_norm, or None')
@@ -137,7 +138,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
 
 
         result = sess.run(input_tensors, feed_dict)
-        result_debug = sess.run([model.total_loss1] +  model.total_losses2, feed_dict)  #!!!!!
+
         #print('result_debug=',result_debug)
         #print('result=',result,'\n')
         #print('result=',result[0],'\n')
@@ -157,7 +158,10 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
                 print_str = 'Iteration ' + str(itr - FLAGS.pretrain_iterations)
             print_str += ': ' + str(np.mean(prelosses)) + ', ' + str(np.mean(postlosses))
             print(print_str)
+            result_debug = sess.run([model.total_loss1] +  model.total_losses2, feed_dict)  #!!!!!
             print('result_debug=',result_debug)
+            print('check_seed_1=',sess.run(model.check_seed_1, feed_dict))
+            print('check_seed_2=',sess.run(model.check_seed_2, feed_dict))
             #wa = sess.run(model.wa.trainable_weights, feed_dict)
             #wo = sess.run(model.wo.trainable_weights, feed_dict)
             #rint('wa=',wa)

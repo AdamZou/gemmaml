@@ -15,7 +15,7 @@ import random
 
 import os
 import warnings
-
+import copy
 # Dependency imports
 from absl import flags
 import matplotlib
@@ -121,7 +121,7 @@ class MAML:
 
         return model
 
-
+    '''
     def construct_fc_weights(self):
         #with tf.name_scope("bayesian_neural_net", values=[images]):
         model = tf.keras.Sequential()
@@ -131,7 +131,17 @@ class MAML:
             #model.add(tf.keras.layers.Dense(self.dim_hidden[i]))
             #model.add(tf.keras.layers.BatchNormalization())
         model.add(tfp.layers.DenseFlipout(self.dim_output))
-
+        return model
+    '''
+    def construct_fc_weights(self):
+        #with tf.name_scope("bayesian_neural_net", values=[images]):
+        model = tf.keras.Sequential()
+        #model = tf.keras.Sequential([tfp.layers.DenseFlipout(self.dim_hidden[0],input_shape=(self.dim_input,) ,activation=tf.nn.relu,kernel_initializer='random_uniform')])
+        for i in range(len(self.dim_hidden)):
+            model.add(tfp.layers.DenseReparameterization(self.dim_hidden[i] ,activation=tf.nn.relu))
+            #model.add(tf.keras.layers.Dense(self.dim_hidden[i]))
+            #model.add(tf.keras.layers.BatchNormalization())
+        model.add(tfp.layers.DenseReparameterization(self.dim_output))
         return model
 
 
@@ -219,8 +229,8 @@ class MAML:
             def deter(model_out,model):
                 for i, layer in enumerate(model_out.layers):
                     try:
-                        layer.kernel_posterior = tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001))
-                        layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=model.layers[i].bias_posterior.mean()))
+                        layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001) ,reinterpreted_batch_ndims=1)
+                        layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=model.layers[i].bias_posterior.mean()) ,reinterpreted_batch_ndims=1)
                     except AttributeError:
                         continue
 
@@ -231,8 +241,8 @@ class MAML:
                     print('j=',j)
                     try:
                         print(layer.kernel_posterior)
-                        layer.kernel_posterior = tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])))
-                        layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=fast_weights[j+2]))
+                        layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=1)
+                        layer.bias_posterior =  tfd.Independent(tfd.Deterministic(loc=fast_weights[j+2]) ,reinterpreted_batch_ndims=1)
                         j+=3
                         print('tfp')
 
@@ -270,6 +280,18 @@ class MAML:
                 output_weights(model,fast_weights)
 
 
+            def copy_tf(des,source):
+                for i in range(len(source)):
+                    des[i] = source[i]
+
+            def set_seed(model,j):
+                for i, layer in enumerate(model.layers):
+                    try:
+                        layer.kernel_posterior_tensor_fn = lambda d: d.sample(seed=j+i)
+                        #model.layers[i].activation = None
+                        #model.layers[i].seed = j+i
+                    except AttributeError:
+                        continue
 
             def set_prior(model_out,model):
                 for i, layer in enumerate(model_out.layers):
@@ -293,8 +315,10 @@ class MAML:
 
 
                 # initialize weights_a , fast_weights_a, weights_b, fast_weights_b
-                fast_weights_a = weights.trainable_weights
-                fast_weights_b = weights.trainable_weights
+                fast_weights_a = len(weights.trainable_weights) * [None]
+                copy_tf(fast_weights_a,weights.trainable_weights)
+                fast_weights_b = len(weights.trainable_weights) * [None]
+                copy_tf(fast_weights_b,weights.trainable_weights)
                 output_weights(weights_a,fast_weights_a)
                 output_weights(weights_b,fast_weights_b)
                 # dumb_loss
@@ -312,21 +336,15 @@ class MAML:
                 print('num_updates=',num_updates) #!!!!!!!!
                 for j in range(num_updates):
 
+                    # check random seed
+                    #set_seed(weights_a,j)
+                    self.check_seed_1 = neg_L(weights_a,inputa,labela)  #!!!!
+                    #set_seed(weights_a,j)
+                    self.check_seed_2 = neg_L(weights_a,inputa,labela)   #!!!!
+
                     # posterior a
-                    '''
-                    neg_log_likelihood_a = neg_L(weights_a,inputa,labela)
-                    kl = sum(weights_a.losses) / tf.cast(tf.size(inputa), tf.float32)  #???
-    	            elbo_loss_a = neg_log_likelihood_a + kl
-                    if j==0:
-                        task_lossa_op = elbo_loss_a
-
-                    grads_a = tf.gradients(elbo_loss_a, fast_weights_a)
-                    if FLAGS.stop_grad:
-                        grads_a = [tf.stop_gradient(grad) for grad in grads_a]
-
-                    fast_weights_a = [(fast_weights_a[i] - self.update_lr*grads_a[i]) for i in range(len(grads_a))]
-                    output_weights(weights_a,fast_weights_a)
-                    '''
+                    if FLAGS.setseed:
+                        set_seed(weights_a,j)
                     apply_grad(weights_a,fast_weights_a,inputa,labela)
 
                     # traditional val loss
@@ -338,17 +356,17 @@ class MAML:
                     task_lossesb.append(self.loss_func(task_output, tf.cast(labelb, tf.float32)))
 
                     # posterior b
-                    '''
-                    neg_log_likelihood_b = neg_L(weights_b, tf.concat([inputa,inputb],0) , tf.concat([labela,labelb],0))
-                    kl = sum(weights_b.losses) / tf.cast(tf.size(inputa)+tf.size(inputb), tf.float32)  #???
-                    elbo_loss_b = neg_log_likelihood_b + kl
-                    grads_b = tf.gradients(elbo_loss_b, fast_weights_b)
-                    if FLAGS.stop_grad:
-                        grads_b = [tf.stop_gradient(grad) for grad in grads_b]
-                    fast_weights_b = [(fast_weights_b[i]  - self.update_lr*grads_b[i]) for i in range(len(grads_b))]
+
+
+                    copy_tf(fast_weights_b,fast_weights_a)
                     output_weights(weights_b,fast_weights_b)
-                    '''
-                    apply_grad(weights_b,fast_weights_b,tf.concat([inputa,inputb],0),tf.concat([labela,labelb],0))
+
+                    if FLAGS.setseed:
+                        set_seed(weights_a,j)
+                    apply_grad(weights_b,fast_weights_b,inputb,labelb)
+
+
+                    #apply_grad(weights_b,fast_weights_b,tf.concat([inputa,inputb],0),tf.concat([labela,labelb],0))
 
                     # define the loss op
                     fw_a_stop = [tf.stop_gradient(weight) for weight in fast_weights_a]
@@ -368,7 +386,7 @@ class MAML:
                             lossb_abq.append( - weights_a_stop.layers[i].kernel_posterior.cross_entropy(q) + weights_b_stop.layers[i].kernel_posterior.cross_entropy(q) )
                             lossb_ab_kl.append(weights_b_stop.layers[i].kernel_posterior.kl_divergence(weights_a.layers[i].kernel_posterior))
                             lossb_bq.append(weights_b_stop.layers[i].kernel_posterior.cross_entropy(q))
-                            lossb_ab_xe.append(weights_b_stop.layers[i].kernel_posterior.cross_entropy(weights_a.layers[i].kernel_posterior))
+                            lossb_ab_xe.append( - weights_b_stop.layers[i].kernel_posterior.cross_entropy(weights_a.layers[i].kernel_posterior))
                         except AttributeError:
                             continue
 
