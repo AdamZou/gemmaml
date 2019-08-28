@@ -98,8 +98,7 @@ class MAML:
             raise ValueError('Unrecognized data source.')
 
 
-
-
+    '''
     def construct_conv_weights(self):
         #with tf.name_scope("bayesian_neural_net", values=[images]):
         k=3
@@ -120,6 +119,35 @@ class MAML:
             tfp.layers.DenseFlipout(self.dim_output)])
 
         return model
+    '''
+
+    def construct_conv_weights(self):
+        #with tf.name_scope("bayesian_neural_net", values=[images]):
+        k=3
+        channels = self.channels
+        stride = (2,2)
+        model = tf.keras.Sequential([
+            #tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, padding="SAME", activation=tf.nn.relu,input_shape=(None,28, 28, 1)),
+            tf.keras.layers.Reshape((self.img_size, self.img_size,channels)),
+            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME", activation=tf.nn.relu),
+            tf.keras.layers.BatchNormalization(axis=[0,1,2,3]),
+            #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
+            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME", activation=tf.nn.relu),
+            #tf.keras.layers.BatchNormalization(),
+            #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
+            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME",activation=tf.nn.relu),
+            #tf.keras.layers.BatchNormalization(),
+            #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
+            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME",activation=tf.nn.relu),
+            #tf.keras.layers.BatchNormalization(),
+            #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
+            tf.keras.layers.GlobalAveragePooling2D(),
+            tf.keras.layers.Flatten(),
+            #tfp.layers.DenseFlipout(84, activation=tf.nn.relu),
+            tfp.layers.DenseFlipout(self.dim_output)])
+
+        return model
+
 
     '''
     def construct_fc_weights(self):
@@ -255,6 +283,7 @@ class MAML:
                         '''
                         continue
 
+            '''
             def neg_L(model, input, label):
                 mean = model(tf.cast(input, tf.float32))
                 if self.classification:
@@ -265,18 +294,31 @@ class MAML:
                     labels_distribution = tfd.Normal(loc=mean ,scale= self.sigma)
                 neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(label, tf.float32)))
                 return neg_log_likelihood
+            '''
+
+            def neg_L(model, input, label):
+                task_output = model(tf.cast(input, tf.float32))
+                neg_log_likelihood = self.loss_func(task_output, tf.cast(label, tf.float32))
+                return neg_log_likelihood
 
 
             def apply_grad(model, fast_weights, input, label):
                 neg_log_likelihood = neg_L(model, input , label)
                 kl = sum(model.losses) / tf.cast(tf.size(input), tf.float32)  #???
-                elbo_loss = neg_log_likelihood + kl
+                if not FLAGS.determ:
+                    elbo_loss = neg_log_likelihood + kl
+                else:
+                    deter(weights_output,model)
+                    task_output = weights_output(tf.cast(input, tf.float32))
+                    elbo_loss = self.loss_func(task_output, tf.cast(label, tf.float32))
+
                 grads = tf.gradients(elbo_loss, fast_weights)
                 if FLAGS.stop_grad:
-                    grads = [tf.stop_gradient(grad) for grad in grads]
+                    grads = [tf.stop_gradient(grad) if grad is not None else grad for grad in grads]
                 #fast_weights = [(fast_weights[i]  - self.update_lr*grads[i]) for i in range(len(grads))]
                 for i in range(len(grads)):
-                    fast_weights[i] = (fast_weights[i]  - self.update_lr*grads[i])
+                    if grads[i] is not None:
+                        fast_weights[i] = (fast_weights[i]  - self.update_lr*grads[i])
                 output_weights(model,fast_weights)
 
 
@@ -322,25 +364,28 @@ class MAML:
                 output_weights(weights_a,fast_weights_a)
                 output_weights(weights_b,fast_weights_b)
                 # dumb_loss
-                neg_log_likelihood_dumb_b = neg_L(weights, tf.concat([inputa,inputb],0) , tf.concat([labela,labelb],0))
+                #neg_log_likelihood_dumb_b = neg_L(weights, tf.concat([inputa,inputb],0) , tf.concat([labela,labelb],0))
                 neg_log_likelihood_dumb_a = neg_L(weights, inputa , labela)
+                neg_log_likelihood_dumb_b = neg_log_likelihood_dumb_a  # dumb_b will be deprecated
+
                 # output and loss for initial state
                 deter(weights_output,weights_a)
-                task_output = weights_output(tf.cast(inputb, tf.float32))
-                task_outputa = task_output
+                task_outputa = task_output = weights_output(tf.cast(inputb, tf.float32))
                 task_lossa = self.loss_func(task_output, tf.cast(labelb, tf.float32))
+                #task_lossa_test = neg_L(weights_output,inputb,labelb)   #!!!
 
                 # task_lossa_op
                 task_lossa_op = neg_L(weights_a,inputa,labela)
+
 
                 print('num_updates=',num_updates) #!!!!!!!!
                 for j in range(num_updates):
 
                     # check random seed
                     #set_seed(weights_a,j)
-                    self.check_seed_1 = neg_L(weights_a,inputa,labela)  #!!!!
+                    #self.check_seed_1 = neg_L(weights_a,inputa,labela)  #!!!!
                     #set_seed(weights_a,j)
-                    self.check_seed_2 = neg_L(weights_a,inputa,labela)   #!!!!
+                    #self.check_seed_2 = neg_L(weights_a,inputa,labela)   #!!!!
 
                     # posterior a
                     if FLAGS.setseed:
@@ -357,14 +402,12 @@ class MAML:
 
                     # posterior b
 
-
                     copy_tf(fast_weights_b,fast_weights_a)
                     output_weights(weights_b,fast_weights_b)
 
                     if FLAGS.setseed:
                         set_seed(weights_a,j)
                     apply_grad(weights_b,fast_weights_b,inputb,labelb)
-
 
                     #apply_grad(weights_b,fast_weights_b,tf.concat([inputa,inputb],0),tf.concat([labela,labelb],0))
 
@@ -382,11 +425,12 @@ class MAML:
                     for i, layer in enumerate(weights.layers):
                         try:
                             #q = layer.kernel_posterior
-                            q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()))
+                            q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()) ,reinterpreted_batch_ndims=1)
                             lossb_abq.append( - weights_a_stop.layers[i].kernel_posterior.cross_entropy(q) + weights_b_stop.layers[i].kernel_posterior.cross_entropy(q) )
-                            lossb_ab_kl.append(weights_b_stop.layers[i].kernel_posterior.kl_divergence(weights_a.layers[i].kernel_posterior))
+                            lossb_ab_kl.append( weights_b_stop.layers[i].kernel_posterior.kl_divergence(weights_a.layers[i].kernel_posterior))
                             lossb_bq.append(weights_b_stop.layers[i].kernel_posterior.cross_entropy(q))
-                            lossb_ab_xe.append( - weights_b_stop.layers[i].kernel_posterior.cross_entropy(weights_a.layers[i].kernel_posterior))
+                            lossb_ab_xe.append(  weights_b_stop.layers[i].kernel_posterior.cross_entropy(weights_a.layers[i].kernel_posterior))
+                            lossb_ab_xe.append(  weights_b_stop.layers[i].bias_posterior.cross_entropy(weights_a.layers[i].bias_posterior))
                         except AttributeError:
                             continue
 
@@ -399,6 +443,9 @@ class MAML:
                         meta_loss = sum(lossb_ab_xe)
                     if FLAGS.meta_loss == 'bq':
                         meta_loss = sum(lossb_bq)
+
+                    if FLAGS.meta_loss == 'a':
+                        meta_loss = neg_log_likelihood_a
                     if FLAGS.meta_loss == 'b':
                         meta_loss = neg_log_likelihood_b
                     if FLAGS.meta_loss == 'b-a':
@@ -409,7 +456,11 @@ class MAML:
                         meta_loss = neg_log_likelihood_dumb_b
                     if FLAGS.meta_loss == 'dumb_b-a':
                         meta_loss = -(neg_log_likelihood_dumb_b - neg_log_likelihood_dumb_a)
+
                     task_lossesb_op.append(meta_loss)
+                    if FLAGS.determ:
+                        task_lossesb_op = task_lossesb
+
                 # end for
                 #self.outb_last=task_outputb    #!!!!!!!!!
                 task_output = [task_outputa, task_outputbs, task_lossa, task_lossesb, task_lossa_op, task_lossesb_op ]

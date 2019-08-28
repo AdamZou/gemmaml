@@ -56,7 +56,7 @@ flags.DEFINE_float('update_lr', 1e-3, 'step size alpha for inner gradient update
 flags.DEFINE_integer('num_updates', 1, 'number of inner gradient updates during training.')
 flags.DEFINE_string('meta_loss', 'b*a', 'type of the meta loss function.')
 flags.DEFINE_bool('one_sample', False, 'use the same sample for all training iterations or not')
-flags.DEFINE_bool('setseed', True, 'use the same seed in one loop')
+flags.DEFINE_bool('setseed', False, 'use the same seed in one loop')
 
 ## Model options
 flags.DEFINE_string('norm', 'batch_norm', 'batch_norm, layer_norm, or None')
@@ -64,6 +64,7 @@ flags.DEFINE_integer('num_filters', 64, 'number of filters for conv nets -- 32 f
 flags.DEFINE_bool('conv', True, 'whether or not to use a convolutional network, only applicable in some cases')
 flags.DEFINE_bool('max_pool', False, 'Whether or not to use max pooling rather than strided convolutions')
 flags.DEFINE_bool('stop_grad',False, 'if True, do not use second derivatives in meta-optimization (for speed)')
+flags.DEFINE_bool('determ',False, 'if True, use the original deterministic NN (for DEBUG)')
 
 ## Logging, saving, and testing options
 flags.DEFINE_bool('log', True, 'if false, do not log summaries, for debugging code.')
@@ -75,6 +76,8 @@ flags.DEFINE_bool('test_set', False, 'Set to true to test on the the test set, F
 flags.DEFINE_integer('train_update_batch_size', -1, 'number of examples used for gradient update during training (use if you want to test with a different number).')
 flags.DEFINE_float('train_update_lr', -1, 'value of inner gradient step step during training. (use if you want to test with a different value)') # 0.1 for omniglot
 flags.DEFINE_integer('test_num_updates', -1, 'number of inner gradient updates during testing.')
+flags.DEFINE_bool('debug',False, 'if True, only very few samples will be generated in data (for DEBUG)')
+
 
 def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
     SUMMARY_INTERVAL = 100
@@ -158,18 +161,21 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
                 print_str = 'Iteration ' + str(itr - FLAGS.pretrain_iterations)
             print_str += ': ' + str(np.mean(prelosses)) + ', ' + str(np.mean(postlosses))
             print(print_str)
-            result_debug = sess.run([model.total_loss1] +  model.total_losses2, feed_dict)  #!!!!!
+            result_debug = sess.run([model.total_loss1] +  model.total_losses2 + [model.total_accuracy1] + model.total_accuracies2, feed_dict)  #!!!!!
             print('result_debug=',result_debug)
-            print('check_seed_1=',sess.run(model.check_seed_1, feed_dict))
-            print('check_seed_2=',sess.run(model.check_seed_2, feed_dict))
+            #print('check_seed_1=',sess.run(model.check_seed_1, feed_dict))
+            #print('check_seed_2=',sess.run(model.check_seed_2, feed_dict))
             #wa = sess.run(model.wa.trainable_weights, feed_dict)
             #wo = sess.run(model.wo.trainable_weights, feed_dict)
-            #rint('wa=',wa)
+            #print('wa=',wa)
             #print('wo=',wo)
             #outputas, outputbs, lossesa, lossesb
 
             #print(yoyomaki)
             print('outputbs=',sess.run(model.outputbs, feed_dict))
+            print('inputa=',sess.run(tf.reduce_sum(model.inputa[0],axis=1), feed_dict))
+            print('labela=',sess.run(model.labela, feed_dict))
+            print('inputb=',sess.run(tf.reduce_sum(model.inputb[0],axis=1), feed_dict))
             print('labelb=',sess.run(model.labelb, feed_dict))
             if model.classification:
                 print('accuraciesb=',sess.run(model.accuraciesb, feed_dict))
