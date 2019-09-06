@@ -3,6 +3,7 @@ from __future__ import print_function
 import numpy as np
 import sys
 import tensorflow as tf
+#import keras
 try:
     import special_grads
 except KeyError as e:
@@ -98,28 +99,6 @@ class MAML:
             raise ValueError('Unrecognized data source.')
 
 
-    '''
-    def construct_conv_weights(self):
-        #with tf.name_scope("bayesian_neural_net", values=[images]):
-        k=3
-        channels = self.channels
-        model = tf.keras.Sequential([
-            #tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, padding="SAME", activation=tf.nn.relu,input_shape=(None,28, 28, 1)),
-            tf.keras.layers.Reshape((self.img_size, self.img_size,channels)),
-            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, padding="SAME", activation=tf.nn.relu),
-            #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
-            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=5, padding="SAME", activation=tf.nn.relu),
-            #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
-            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=5, padding="SAME",activation=tf.nn.relu),
-            #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
-            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=5, padding="SAME",activation=tf.nn.relu),
-            tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
-            tf.keras.layers.Flatten(),
-            tfp.layers.DenseFlipout(84, activation=tf.nn.relu),
-            tfp.layers.DenseFlipout(self.dim_output)])
-
-        return model
-    '''
 
     def construct_conv_weights(self):
         #with tf.name_scope("bayesian_neural_net", values=[images]):
@@ -127,40 +106,39 @@ class MAML:
         channels = self.channels
         stride = (2,2)
         model = tf.keras.Sequential([
-            #tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, padding="SAME", activation=tf.nn.relu,input_shape=(None,28, 28, 1)),
+            #tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, padding="SAME", activation=tf.nn.relu,input_shape=(None,28, 28, 1)),  ,input_shape=(1, 5, 784)
             tf.keras.layers.Reshape((self.img_size, self.img_size,channels)),
-            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME", activation=tf.nn.relu),
-            tf.keras.layers.BatchNormalization(axis=[0,1,2,3]),
+            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
+            #tf.layers.Conv2D(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME", activation=tf.nn.relu),
+            tf.keras.layers.BatchNormalization(),
+            tf.keras.layers.Activation('relu'),
             #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
-            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME", activation=tf.nn.relu),
+            #tf.layers.Conv2D(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME", activation=tf.nn.relu),
+            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
+            tf.keras.layers.BatchNormalization(),
+            tf.keras.layers.Activation('relu'),
             #tf.keras.layers.BatchNormalization(),
             #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
-            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME",activation=tf.nn.relu),
+            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
+            tf.keras.layers.BatchNormalization(),
+            tf.keras.layers.Activation('relu'),
             #tf.keras.layers.BatchNormalization(),
             #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
-            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME",activation=tf.nn.relu),
+            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
+            tf.keras.layers.BatchNormalization(),
+            tf.keras.layers.Activation('relu'),
             #tf.keras.layers.BatchNormalization(),
             #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
             tf.keras.layers.GlobalAveragePooling2D(),
             tf.keras.layers.Flatten(),
             #tfp.layers.DenseFlipout(84, activation=tf.nn.relu),
             tfp.layers.DenseFlipout(self.dim_output)])
+            #keras.layers.Dense(self.dim_output)])
 
         return model
 
 
-    '''
-    def construct_fc_weights(self):
-        #with tf.name_scope("bayesian_neural_net", values=[images]):
-        model = tf.keras.Sequential()
-        #model = tf.keras.Sequential([tfp.layers.DenseFlipout(self.dim_hidden[0],input_shape=(self.dim_input,) ,activation=tf.nn.relu,kernel_initializer='random_uniform')])
-        for i in range(len(self.dim_hidden)):
-            model.add(tfp.layers.DenseFlipout(self.dim_hidden[i] ,activation=tf.nn.relu))
-            #model.add(tf.keras.layers.Dense(self.dim_hidden[i]))
-            #model.add(tf.keras.layers.BatchNormalization())
-        model.add(tfp.layers.DenseFlipout(self.dim_output))
-        return model
-    '''
+
     def construct_fc_weights(self):
         #with tf.name_scope("bayesian_neural_net", values=[images]):
         model = tf.keras.Sequential()
@@ -245,7 +223,7 @@ class MAML:
             accuraciesb = [[]]*num_updates
 
 
-
+            '''
             def predict(NN,inputs):
                 logits=[]
                 for i in range(self.num_repeat):
@@ -254,13 +232,13 @@ class MAML:
                 std = reduce_std(logits,0)
                 return mean, std
 
-            def deter(model_out,model):
-                for i, layer in enumerate(model_out.layers):
-                    try:
-                        layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001) ,reinterpreted_batch_ndims=1)
-                        layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=model.layers[i].bias_posterior.mean()) ,reinterpreted_batch_ndims=1)
-                    except AttributeError:
-                        continue
+
+            def output_weights(model_out,fast_weights):
+                j=0
+                for layer in model_out.layers:
+                    for var in layer.trainable_weights:
+                        var = fast_weights[j]
+                        j+=1
 
             def output_weights(model_out,fast_weights):
                 j=0
@@ -275,15 +253,13 @@ class MAML:
                         print('tfp')
 
                     except AttributeError:
-                        '''
-                        layer.gamma = fast_weights[j]
-                        layer.beta = fast_weights[j+1]
-                        j+=2
-                        print('norm')
-                        '''
+                        for var in layer.trainable_weights:
+                            var = fast_weights[j]
+                            j+=1
+                            print('norm')
+
                         continue
 
-            '''
             def neg_L(model, input, label):
                 mean = model(tf.cast(input, tf.float32))
                 if self.classification:
@@ -295,6 +271,45 @@ class MAML:
                 neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(label, tf.float32)))
                 return neg_log_likelihood
             '''
+
+            def deter(model_out,model):
+                for i, layer in enumerate(model_out.layers):
+                    try:
+                        layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001) ,reinterpreted_batch_ndims=1)
+                        layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=model.layers[i].bias_posterior.mean()) ,reinterpreted_batch_ndims=1)
+                    except AttributeError:
+                        for j in range(len(layer.trainable_weights)):
+                            layer.trainable_weights[j] = model.layers[i].trainable_weights[j]
+                        continue
+
+            '''
+            def output_weights(model_out,fast_weights):
+                j=0
+                for layer in model_out.layers:
+                    for var in layer.trainable_weights:
+                        var = fast_weights[j]
+                        j+=1
+            '''
+
+            def output_weights(model_out,fast_weights):
+                j=0
+                for i, layer in enumerate(model_out.layers):
+                    print(i,layer)
+                    print('j=',j)
+                    try:
+                        print(layer.kernel_posterior)
+                        layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=1)
+                        layer.bias_posterior =  tfd.Independent(tfd.Deterministic(loc=fast_weights[j+2]) ,reinterpreted_batch_ndims=1)
+                        j+=3
+                        print('tfp')
+
+                    except AttributeError:
+                        for var in layer.trainable_weights:
+                            var = fast_weights[j]
+                            j+=1
+                            print('norm')
+                        continue
+
 
             def neg_L(model, input, label):
                 task_output = model(tf.cast(input, tf.float32))
@@ -422,6 +437,7 @@ class MAML:
                     lossb_bq =[]
                     lossb_ab_xe=[]
 
+                    '''
                     for i, layer in enumerate(weights.layers):
                         try:
                             #q = layer.kernel_posterior
@@ -433,7 +449,7 @@ class MAML:
                             lossb_ab_xe.append(  weights_b_stop.layers[i].bias_posterior.cross_entropy(weights_a.layers[i].bias_posterior))
                         except AttributeError:
                             continue
-
+                    '''
 
                     if FLAGS.meta_loss == 'abq':
                         meta_loss = sum(lossb_abq)
