@@ -161,6 +161,8 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
                 print_str = 'Iteration ' + str(itr - FLAGS.pretrain_iterations)
             print_str += ': ' + str(np.mean(prelosses)) + ', ' + str(np.mean(postlosses))
             print(print_str)
+
+            '''
             result_debug = sess.run([model.total_loss1] +  model.total_losses2 + [model.total_accuracy1] + model.total_accuracies2, feed_dict)  #!!!!!
             print('result_debug=',result_debug)
             #print('check_seed_1=',sess.run(model.check_seed_1, feed_dict))
@@ -180,7 +182,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
             if model.classification:
                 print('accuraciesb=',sess.run(model.accuraciesb, feed_dict))
 
-            '''
+           
             print('inputa=',sess.run(inputa))
             print('labela=',sess.run(labela))
             print('outputas=',sess.run(model.outputas, feed_dict))
@@ -404,6 +406,7 @@ def main():
 
         if FLAGS.train: # only construct training model if needed
             random.seed(5)
+            #random.seed(7)
             image_tensor, label_tensor = data_generator.make_data_tensor()
             inputa = tf.slice(image_tensor, [0,0,0], [-1,num_classes*FLAGS.update_batch_size, -1])
             inputb = tf.slice(image_tensor, [0,num_classes*FLAGS.update_batch_size, 0], [-1,-1,-1])
@@ -412,6 +415,7 @@ def main():
             input_tensors = {'inputa': inputa, 'inputb': inputb, 'labela': labela, 'labelb': labelb}
 
         random.seed(6)
+        #random.seed(8)
         image_tensor, label_tensor = data_generator.make_data_tensor(train=False)
         inputa = tf.slice(image_tensor, [0,0,0], [-1,num_classes*FLAGS.update_batch_size, -1])
         inputb = tf.slice(image_tensor, [0,num_classes*FLAGS.update_batch_size, 0], [-1,-1,-1])

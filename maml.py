@@ -276,10 +276,11 @@ class MAML:
                 for i, layer in enumerate(model_out.layers):
                     try:
                         layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001) ,reinterpreted_batch_ndims=1)
+                        #layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001) ,reinterpreted_batch_ndims=len(model.layers[i].kernel_posterior.mean().shape))
                         layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=model.layers[i].bias_posterior.mean()) ,reinterpreted_batch_ndims=1)
                     except AttributeError:
-                        for j in range(len(layer.trainable_weights)):
-                            layer.trainable_weights[j] = model.layers[i].trainable_weights[j]
+                        #for j in range(len(layer.trainable_weights)):
+                        #    layer.trainable_weights[j] = model.layers[i].trainable_weights[j]
                         continue
 
             '''
@@ -290,7 +291,6 @@ class MAML:
                         var = fast_weights[j]
                         j+=1
             '''
-
             def output_weights(model_out,fast_weights):
                 j=0
                 for i, layer in enumerate(model_out.layers):
@@ -299,6 +299,7 @@ class MAML:
                     try:
                         print(layer.kernel_posterior)
                         layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=1)
+                        #layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=len(layer.kernel_posterior.mean().shape))
                         layer.bias_posterior =  tfd.Independent(tfd.Deterministic(loc=fast_weights[j+2]) ,reinterpreted_batch_ndims=1)
                         j+=3
                         print('tfp')
