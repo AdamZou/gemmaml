@@ -105,35 +105,52 @@ class MAML:
         k=3
         channels = self.channels
         stride = (2,2)
-        model = tf.keras.Sequential([
-            #tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, padding="SAME", activation=tf.nn.relu,input_shape=(None,28, 28, 1)),  ,input_shape=(1, 5, 784)
-            tf.keras.layers.Reshape((self.img_size, self.img_size,channels)),
-            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
-            #tf.layers.Conv2D(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME", activation=tf.nn.relu),
-            tf.keras.layers.BatchNormalization(),
-            tf.keras.layers.Activation('relu'),
-            #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
-            #tf.layers.Conv2D(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME", activation=tf.nn.relu),
-            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
-            tf.keras.layers.BatchNormalization(),
-            tf.keras.layers.Activation('relu'),
-            #tf.keras.layers.BatchNormalization(),
-            #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
-            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
-            tf.keras.layers.BatchNormalization(),
-            tf.keras.layers.Activation('relu'),
-            #tf.keras.layers.BatchNormalization(),
-            #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
-            tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
-            tf.keras.layers.BatchNormalization(),
-            tf.keras.layers.Activation('relu'),
-            #tf.keras.layers.BatchNormalization(),
-            #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
-            tf.keras.layers.GlobalAveragePooling2D(),
-            tf.keras.layers.Flatten(),
-            #tfp.layers.DenseFlipout(84, activation=tf.nn.relu),
-            tfp.layers.DenseFlipout(self.dim_output)])
-            #keras.layers.Dense(self.dim_output)])
+
+        if FLAGS.norm == 'batch_norm':
+            model = tf.keras.Sequential([
+                #tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, padding="SAME", activation=tf.nn.relu,input_shape=(None,28, 28, 1)),  ,input_shape=(1, 5, 784)
+                tf.keras.layers.Reshape((self.img_size, self.img_size,channels)),
+                tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
+                #tf.layers.Conv2D(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME", activation=tf.nn.relu),
+                tf.keras.layers.BatchNormalization(),
+                tf.keras.layers.Activation('relu'),
+                #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
+                #tf.layers.Conv2D(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME", activation=tf.nn.relu),
+                tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
+                tf.keras.layers.BatchNormalization(),
+                tf.keras.layers.Activation('relu'),
+                #tf.keras.layers.BatchNormalization(),
+                #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
+                tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
+                tf.keras.layers.BatchNormalization(),
+                tf.keras.layers.Activation('relu'),
+                #tf.keras.layers.BatchNormalization(),
+                #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
+                tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
+                tf.keras.layers.BatchNormalization(),
+                tf.keras.layers.Activation('relu'),
+                #tf.keras.layers.BatchNormalization(),
+                #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
+                tf.keras.layers.GlobalAveragePooling2D(),
+                tf.keras.layers.Flatten(),
+                #tfp.layers.DenseFlipout(84, activation=tf.nn.relu),
+                tfp.layers.DenseFlipout(self.dim_output)])
+                #keras.layers.Dense(self.dim_output)])
+
+        if FLAGS.norm == 'None':
+            model = tf.keras.Sequential([
+                tf.keras.layers.Reshape((self.img_size, self.img_size,channels)),
+                tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
+                tf.keras.layers.Activation('relu'),
+                tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
+                tf.keras.layers.Activation('relu'),
+                tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
+                tf.keras.layers.Activation('relu'),
+                tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
+                tf.keras.layers.Activation('relu'),
+                tf.keras.layers.GlobalAveragePooling2D(),
+                tf.keras.layers.Flatten(),
+                tfp.layers.DenseFlipout(self.dim_output)])
 
         return model
 
@@ -212,11 +229,18 @@ class MAML:
             # outputbs[i] and lossesb[i] is the output and loss after i+1 gradient updates
             lossesa, outputas, lossesb, outputbs = [], [], [], []
             accuraciesa, accuraciesb = [], []
+            '''
             #num_updates = max(self.test_num_updates, FLAGS.num_updates)
             if FLAGS.test_num_updates==-1:
                 num_updates = FLAGS.num_updates
             else:
                 num_updates = FLAGS.test_num_updates
+            '''
+
+            if FLAGS.train:
+                num_updates = FLAGS.num_updates
+            else:
+                num_updates = self.test_num_updates
 
             outputbs = [[]]*num_updates
             lossesb = [[]]*num_updates
@@ -291,6 +315,7 @@ class MAML:
                         var = fast_weights[j]
                         j+=1
             '''
+
             def output_weights(model_out,fast_weights):
                 j=0
                 for i, layer in enumerate(model_out.layers):
@@ -375,14 +400,14 @@ class MAML:
                 # initialize weights_a , fast_weights_a, weights_b, fast_weights_b
                 fast_weights_a = len(weights.trainable_weights) * [None]
                 copy_tf(fast_weights_a,weights.trainable_weights)
-                fast_weights_b = len(weights.trainable_weights) * [None]
-                copy_tf(fast_weights_b,weights.trainable_weights)
+                #fast_weights_b = len(weights.trainable_weights) * [None]
+                #copy_tf(fast_weights_b,weights.trainable_weights)
                 output_weights(weights_a,fast_weights_a)
-                output_weights(weights_b,fast_weights_b)
+                #output_weights(weights_b,fast_weights_b)
                 # dumb_loss
                 #neg_log_likelihood_dumb_b = neg_L(weights, tf.concat([inputa,inputb],0) , tf.concat([labela,labelb],0))
                 neg_log_likelihood_dumb_a = neg_L(weights, inputa , labela)
-                neg_log_likelihood_dumb_b = neg_log_likelihood_dumb_a  # dumb_b will be deprecated
+                #neg_log_likelihood_dumb_b = neg_log_likelihood_dumb_a  # dumb_b will be deprecated
 
                 # output and loss for initial state
                 deter(weights_output,weights_a)
@@ -417,22 +442,23 @@ class MAML:
                     task_lossesb.append(self.loss_func(task_output, tf.cast(labelb, tf.float32)))
 
                     # posterior b
-
+                    '''
                     copy_tf(fast_weights_b,fast_weights_a)
                     output_weights(weights_b,fast_weights_b)
 
                     if FLAGS.setseed:
                         set_seed(weights_a,j)
                     apply_grad(weights_b,fast_weights_b,inputb,labelb)
-
+                    '''
                     #apply_grad(weights_b,fast_weights_b,tf.concat([inputa,inputb],0),tf.concat([labela,labelb],0))
 
                     # define the loss op
                     fw_a_stop = [tf.stop_gradient(weight) for weight in fast_weights_a]
                     output_weights(weights_a_stop,fw_a_stop)
+                    '''
                     fw_b_stop = [tf.stop_gradient(weight) for weight in fast_weights_b]
                     output_weights(weights_b_stop,fw_b_stop)
-
+                    '''
                     lossb_abq = []
                     lossb_ab_kl =[]
                     lossb_bq =[]

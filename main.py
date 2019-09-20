@@ -30,6 +30,7 @@ import csv
 import numpy as np
 import pickle
 import random
+import os
 import tensorflow as tf
 
 from data_generator import DataGenerator
@@ -182,7 +183,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
             if model.classification:
                 print('accuraciesb=',sess.run(model.accuraciesb, feed_dict))
 
-           
+
             print('inputa=',sess.run(inputa))
             print('labela=',sess.run(labela))
             print('outputas=',sess.run(model.outputas, feed_dict))
@@ -283,6 +284,11 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
         else:  # this is for sinusoid
             #_ = sess.run([model.pretrain_op], feed_dict)  #######?????
             result = sess.run([model.total_loss1] +  model.total_losses2, feed_dict)
+            #print('grads_1=',grads_1)
+            #print('true_weights=',tw)
+            #print('watw=',watw)
+            #print('wa=',wa)
+            #print('wo=',wo)
             '''
             grads_1 = sess.run(model.grads_1, feed_dict)
             #tw = sess.run(model.true_weights_a, feed_dict)
@@ -291,15 +297,6 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
             lb = sess.run(model.lb, feed_dict)
             wa = sess.run(model.wa.trainable_weights, feed_dict)
             wo = sess.run(model.wo.trainable_weights, feed_dict)
-            '''
-            print('TEST:',_)
-            print('result=',result)
-            #print('grads_1=',grads_1)
-            #print('true_weights=',tw)
-            #print('watw=',watw)
-            #print('wa=',wa)
-            #print('wo=',wo)
-            '''
             print('inputa=',inputa)
             print('labela=',labela)
             print('taskoutputa=',sess.run(model.task_outputa, feed_dict))
@@ -311,10 +308,10 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
             print('lb=',lb)
 
             print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
-        #print(sess.run(model.weights_cp.layers[0].kernel_posterior.mean()))
+            #print(sess.run(model.weights_cp.layers[0].kernel_posterior.mean()))
             print(sess.run(model.weights_test[0].layers[0].kernel_posterior.mean()))
-        #print(sess.run(model.weights_test[0].trainable_weights))
-        #print(sess.run(model.weights_test[0].layers[1].kernel_posterior))
+            #print(sess.run(model.weights_test[0].trainable_weights))
+            #print(sess.run(model.weights_test[0].layers[1].kernel_posterior))
             print(model.inputa)
             #print('model.inputa_check=',sess.run(model.inputa_check))
 
@@ -329,6 +326,9 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
             #result = sess.run(model.total_loss1,feed_dict)
             #print(sess.run(model.outputas))
             #print(sess.run(model.weights_output.layers[0].kernel_posterior.mean()))
+        print('TEST:',_)
+        print('result=',result)
+
         metaval_accuracies.append(result)
 
     metaval_accuracies = np.array(metaval_accuracies)
@@ -353,8 +353,8 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
 def main():
     if FLAGS.datasource == 'sinusoid':
         if FLAGS.train:
-            #test_num_updates = 5
-            test_num_updates = 30
+            test_num_updates = 5
+            #test_num_updates = 30
         else:
             test_num_updates = 10
     else:
@@ -364,7 +364,8 @@ def main():
             else:
                 test_num_updates = 10
         else:
-            test_num_updates = 10
+            #test_num_updates = 10
+            test_num_updates = 1  #!!!!
 
     #FLAGS.meta_batch_size = 1     #### debug !!!!!!!!!!!
     if FLAGS.train == False:
@@ -572,8 +573,9 @@ def main():
     print(sess.run(model.weights_test[0](tf.cast(inputa_1[0], tf.float32))))
     '''
     if FLAGS.resume or not FLAGS.train:
-        print(FLAGS.logdir + '/' + exp_string)
-        model_file = tf.train.latest_checkpoint(FLAGS.logdir + '/' + exp_string)
+        #print(FLAGS.logdir + '/' + exp_string)
+        print(os.path.join(FLAGS.logdir,exp_string))
+        model_file = tf.train.latest_checkpoint(os.path.join(FLAGS.logdir,exp_string))
         if FLAGS.test_iter > 0:
             model_file = model_file[:model_file.index('model')] + 'model' + str(FLAGS.test_iter)
         if model_file:
