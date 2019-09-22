@@ -78,7 +78,7 @@ flags.DEFINE_integer('train_update_batch_size', -1, 'number of examples used for
 flags.DEFINE_float('train_update_lr', -1, 'value of inner gradient step step during training. (use if you want to test with a different value)') # 0.1 for omniglot
 flags.DEFINE_integer('test_num_updates', -1, 'number of inner gradient updates during testing.')
 flags.DEFINE_bool('debug',False, 'if True, only very few samples will be generated in data (for DEBUG)')
-
+flags.DEFINE_string('alias', '', 'it is used to distinguish different models in saving paths')
 
 def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
     SUMMARY_INTERVAL = 100
@@ -162,6 +162,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
                 print_str = 'Iteration ' + str(itr - FLAGS.pretrain_iterations)
             print_str += ': ' + str(np.mean(prelosses)) + ', ' + str(np.mean(postlosses))
             print(print_str)
+            print(model.weights.get_weights()) # # DEBUG:
 
             '''
             result_debug = sess.run([model.total_loss1] +  model.total_losses2 + [model.total_accuracy1] + model.total_accuracies2, feed_dict)  #!!!!!
@@ -498,7 +499,7 @@ def main():
     if FLAGS.train_update_lr == -1:
         FLAGS.train_update_lr = FLAGS.update_lr
 
-    exp_string = 'cls_'+str(FLAGS.num_classes)+'.mbs_'+str(FLAGS.meta_batch_size) + '.ubs_' + str(FLAGS.train_update_batch_size) + '.numstep' + str(FLAGS.num_updates) + '.updatelr' + str(FLAGS.train_update_lr)+'.meta_loss'+str(FLAGS.meta_loss)
+    exp_string = 'cls_'+str(FLAGS.num_classes)+'.mbs_'+str(FLAGS.meta_batch_size) + '.ubs_' + str(FLAGS.train_update_batch_size) + '.numstep' + str(FLAGS.num_updates) + '.updatelr' + str(FLAGS.train_update_lr)+'.meta_loss'+str(FLAGS.meta_loss)+'.debug'+str(FLAGS.debug)+'.alias'+FLAGS.alias
 
     if FLAGS.one_sample:
         exp_string += 'one_sample'
@@ -630,6 +631,7 @@ def main():
         #print tf.get_default_graph().as_graph_def()
         #for i, var in enumerate(saver._var_list):
         #    print('Var {}: {}'.format(i, var))
+        print('start training')
         train(model, saver, sess, exp_string, data_generator, resume_itr)
     else:
 

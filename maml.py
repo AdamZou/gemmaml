@@ -112,22 +112,22 @@ class MAML:
                 tf.keras.layers.Reshape((self.img_size, self.img_size,channels)),
                 tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
                 #tf.layers.Conv2D(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME", activation=tf.nn.relu),
-                tf.keras.layers.BatchNormalization(),
+                tf.keras.layers.BatchNormalization(trainable=False),
                 tf.keras.layers.Activation('relu'),
                 #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
                 #tf.layers.Conv2D(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME", activation=tf.nn.relu),
                 tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
-                tf.keras.layers.BatchNormalization(),
+                tf.keras.layers.BatchNormalization(trainable=False),
                 tf.keras.layers.Activation('relu'),
                 #tf.keras.layers.BatchNormalization(),
                 #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
                 tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
-                tf.keras.layers.BatchNormalization(),
+                tf.keras.layers.BatchNormalization(trainable=False),
                 tf.keras.layers.Activation('relu'),
                 #tf.keras.layers.BatchNormalization(),
                 #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
                 tfp.layers.Convolution2DFlipout(self.dim_hidden, kernel_size=k, strides=stride, padding="SAME"),
-                tf.keras.layers.BatchNormalization(),
+                tf.keras.layers.BatchNormalization(trainable=False),
                 tf.keras.layers.Activation('relu'),
                 #tf.keras.layers.BatchNormalization(),
                 #tf.keras.layers.MaxPooling2D(pool_size=[2, 2], strides=[2, 2], padding="SAME"),
@@ -294,20 +294,8 @@ class MAML:
                     labels_distribution = tfd.Normal(loc=mean ,scale= self.sigma)
                 neg_log_likelihood = -tf.reduce_mean(labels_distribution.log_prob(tf.cast(label, tf.float32)))
                 return neg_log_likelihood
-            '''
 
-            def deter(model_out,model):
-                for i, layer in enumerate(model_out.layers):
-                    try:
-                        layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001) ,reinterpreted_batch_ndims=1)
-                        #layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001) ,reinterpreted_batch_ndims=len(model.layers[i].kernel_posterior.mean().shape))
-                        layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=model.layers[i].bias_posterior.mean()) ,reinterpreted_batch_ndims=1)
-                    except AttributeError:
-                        #for j in range(len(layer.trainable_weights)):
-                        #    layer.trainable_weights[j] = model.layers[i].trainable_weights[j]
-                        continue
 
-            '''
             def output_weights(model_out,fast_weights):
                 j=0
                 for layer in model_out.layers:
@@ -323,19 +311,38 @@ class MAML:
                     print('j=',j)
                     try:
                         print(layer.kernel_posterior)
-                        layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=1)
-                        #layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=len(layer.kernel_posterior.mean().shape))
+                        #layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=1)
+                        layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=len(layer.kernel_posterior.mean().shape))
                         layer.bias_posterior =  tfd.Independent(tfd.Deterministic(loc=fast_weights[j+2]) ,reinterpreted_batch_ndims=1)
                         j+=3
                         print('tfp')
 
                     except AttributeError:
-                        for var in layer.trainable_weights:
-                            var = fast_weights[j]
-                            j+=1
-                            print('norm')
+                        #for i in range(len(layer.trainable_weights)):
+                            #layer.trainable_weights[i] = fast_weights[j]
+                            #j+=1
+                        print('norm')
                         continue
 
+            '''
+            def output_weights(model_out,fast_weights):
+                j=0
+                for layer in model_out.layers:
+                    for i in range(len(layer.trainable_weights)):
+                        layer.trainable_weights[i] = fast_weights[j]
+                        j+=1
+            '''
+
+            def deter(model_out,model):
+                for i, layer in enumerate(model_out.layers):
+                    try:
+                        #layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001) ,reinterpreted_batch_ndims=1)
+                        layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001) ,reinterpreted_batch_ndims=len(model.layers[i].kernel_posterior.mean().shape))
+                        layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=model.layers[i].bias_posterior.mean()) ,reinterpreted_batch_ndims=1)
+                    except AttributeError:
+                        #for j in range(len(layer.trainable_weights)):
+                        #    layer.trainable_weights[j] = model.layers[i].trainable_weights[j]
+                        continue
 
             def neg_L(model, input, label):
                 task_output = model(tf.cast(input, tf.float32))
@@ -344,22 +351,29 @@ class MAML:
 
 
             def apply_grad(model, fast_weights, input, label):
-                neg_log_likelihood = neg_L(model, input , label)
-                kl = sum(model.losses) / tf.cast(tf.size(input), tf.float32)  #???
+
                 if not FLAGS.determ:
-                    elbo_loss = neg_log_likelihood + kl
+                    neg_log_likelihood = neg_L(model, input , label)
+                    kl = sum(model.losses) / tf.cast(tf.size(input), tf.float32)  #???
                 else:
                     deter(weights_output,model)
-                    task_output = weights_output(tf.cast(input, tf.float32))
-                    elbo_loss = self.loss_func(task_output, tf.cast(label, tf.float32))
+                    neg_log_likelihood = neg_L(weights_output, input , label)
+                    kl = 0
+                elbo_loss = neg_log_likelihood + kl
 
+                print('model.weights=',model.trainable_weights)
                 grads = tf.gradients(elbo_loss, fast_weights)
+                print('grads=',grads)
+                print('true_grads=',tf.gradients(elbo_loss, model.trainable_weights))
+                print('true_grads_1=',tf.gradients(self.loss_func(model(tf.cast(input, tf.float32)), tf.cast(label, tf.float32)), model.trainable_weights))
+
                 if FLAGS.stop_grad:
                     grads = [tf.stop_gradient(grad) if grad is not None else grad for grad in grads]
                 #fast_weights = [(fast_weights[i]  - self.update_lr*grads[i]) for i in range(len(grads))]
                 for i in range(len(grads)):
                     if grads[i] is not None:
                         fast_weights[i] = (fast_weights[i]  - self.update_lr*grads[i])
+                print('fast_weights_new=',fast_weights)
                 output_weights(model,fast_weights)
 
 
@@ -402,21 +416,30 @@ class MAML:
                 copy_tf(fast_weights_a,weights.trainable_weights)
                 #fast_weights_b = len(weights.trainable_weights) * [None]
                 #copy_tf(fast_weights_b,weights.trainable_weights)
-                output_weights(weights_a,fast_weights_a)
+                output_weights(weights_a,fast_weights_a)   # DEBUG:
+                print('weights=',weights.trainable_weights)
+                print('weights_a=',weights_a.trainable_weights)
+                print('fast_weights_a',fast_weights_a)
+                model = weights
+                print('true_grads_weights=',tf.gradients(self.loss_func(model(tf.cast(inputb, tf.float32)), tf.cast(labelb, tf.float32)), model.trainable_weights))
+                model = weights_a
+                print('true_grads_weights_a=',tf.gradients(self.loss_func(model(tf.cast(inputb, tf.float32)), tf.cast(labelb, tf.float32)), model.trainable_weights))
                 #output_weights(weights_b,fast_weights_b)
                 # dumb_loss
                 #neg_log_likelihood_dumb_b = neg_L(weights, tf.concat([inputa,inputb],0) , tf.concat([labela,labelb],0))
-                neg_log_likelihood_dumb_a = neg_L(weights, inputa , labela)
+                #neg_log_likelihood_dumb_a = neg_L(weights, inputa , labela)  #!!!!
                 #neg_log_likelihood_dumb_b = neg_log_likelihood_dumb_a  # dumb_b will be deprecated
 
                 # output and loss for initial state
-                deter(weights_output,weights_a)
+                #deter(weights_output,weights_a)
+                deter(weights_output,weights)
                 task_outputa = task_output = weights_output(tf.cast(inputb, tf.float32))
                 task_lossa = self.loss_func(task_output, tf.cast(labelb, tf.float32))
                 #task_lossa_test = neg_L(weights_output,inputb,labelb)   #!!!
 
                 # task_lossa_op
-                task_lossa_op = neg_L(weights_a,inputa,labela)
+                #task_lossa_op = neg_L(weights_a,inputa,labela)
+                task_lossa_op = neg_L(weights,inputa,labela)
 
 
                 print('num_updates=',num_updates) #!!!!!!!!
@@ -432,7 +455,9 @@ class MAML:
                     if FLAGS.setseed:
                         set_seed(weights_a,j)
                     apply_grad(weights_a,fast_weights_a,inputa,labela)
-
+                    print('weights=',weights.trainable_weights)
+                    print('weights_a=',weights_a.trainable_weights)
+                    print('fast_weights_a',fast_weights_a)
                     # traditional val loss
                     neg_log_likelihood_cross = neg_L(weights_a,inputb,labelb)
 
@@ -453,9 +478,10 @@ class MAML:
                     #apply_grad(weights_b,fast_weights_b,tf.concat([inputa,inputb],0),tf.concat([labela,labelb],0))
 
                     # define the loss op
+                    '''
                     fw_a_stop = [tf.stop_gradient(weight) for weight in fast_weights_a]
                     output_weights(weights_a_stop,fw_a_stop)
-                    '''
+
                     fw_b_stop = [tf.stop_gradient(weight) for weight in fast_weights_b]
                     output_weights(weights_b_stop,fw_b_stop)
                     '''
