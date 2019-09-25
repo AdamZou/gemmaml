@@ -352,6 +352,7 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
         writer.writerow(ci95)
 
 def main():
+    #config.gpu_options.allow_growth = True
     if FLAGS.datasource == 'sinusoid':
         if FLAGS.train:
             test_num_updates = 5

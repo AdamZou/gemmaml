@@ -311,8 +311,8 @@ class MAML:
                     print('j=',j)
                     try:
                         print(layer.kernel_posterior)
-                        #layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=1)
-                        layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=len(layer.kernel_posterior.mean().shape))
+                        layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=1)
+                        #layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=len(layer.kernel_posterior.mean().shape))
                         layer.bias_posterior =  tfd.Independent(tfd.Deterministic(loc=fast_weights[j+2]) ,reinterpreted_batch_ndims=1)
                         j+=3
                         print('tfp')
@@ -336,8 +336,8 @@ class MAML:
             def deter(model_out,model):
                 for i, layer in enumerate(model_out.layers):
                     try:
-                        #layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001) ,reinterpreted_batch_ndims=1)
-                        layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001) ,reinterpreted_batch_ndims=len(model.layers[i].kernel_posterior.mean().shape))
+                        layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001) ,reinterpreted_batch_ndims=1)
+                        #layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001) ,reinterpreted_batch_ndims=len(model.layers[i].kernel_posterior.mean().shape))
                         layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=model.layers[i].bias_posterior.mean()) ,reinterpreted_batch_ndims=1)
                     except AttributeError:
                         #for j in range(len(layer.trainable_weights)):
@@ -361,19 +361,20 @@ class MAML:
                     kl = 0
                 elbo_loss = neg_log_likelihood + kl
 
-                print('model.weights=',model.trainable_weights)
+                #print('model.weights=',model.trainable_weights)
                 grads = tf.gradients(elbo_loss, fast_weights)
+                '''
                 print('grads=',grads)
                 print('true_grads=',tf.gradients(elbo_loss, model.trainable_weights))
                 print('true_grads_1=',tf.gradients(self.loss_func(model(tf.cast(input, tf.float32)), tf.cast(label, tf.float32)), model.trainable_weights))
-
+                '''
                 if FLAGS.stop_grad:
                     grads = [tf.stop_gradient(grad) if grad is not None else grad for grad in grads]
                 #fast_weights = [(fast_weights[i]  - self.update_lr*grads[i]) for i in range(len(grads))]
                 for i in range(len(grads)):
                     if grads[i] is not None:
                         fast_weights[i] = (fast_weights[i]  - self.update_lr*grads[i])
-                print('fast_weights_new=',fast_weights)
+                #print('fast_weights_new=',fast_weights)
                 output_weights(model,fast_weights)
 
 
@@ -416,7 +417,9 @@ class MAML:
                 copy_tf(fast_weights_a,weights.trainable_weights)
                 #fast_weights_b = len(weights.trainable_weights) * [None]
                 #copy_tf(fast_weights_b,weights.trainable_weights)
-                output_weights(weights_a,fast_weights_a)   # DEBUG:
+                output_weights(weights_a,fast_weights_a)
+                '''
+                # DEBUG:
                 print('weights=',weights.trainable_weights)
                 print('weights_a=',weights_a.trainable_weights)
                 print('fast_weights_a',fast_weights_a)
@@ -424,6 +427,7 @@ class MAML:
                 print('true_grads_weights=',tf.gradients(self.loss_func(model(tf.cast(inputb, tf.float32)), tf.cast(labelb, tf.float32)), model.trainable_weights))
                 model = weights_a
                 print('true_grads_weights_a=',tf.gradients(self.loss_func(model(tf.cast(inputb, tf.float32)), tf.cast(labelb, tf.float32)), model.trainable_weights))
+                '''
                 #output_weights(weights_b,fast_weights_b)
                 # dumb_loss
                 #neg_log_likelihood_dumb_b = neg_L(weights, tf.concat([inputa,inputb],0) , tf.concat([labela,labelb],0))
@@ -455,9 +459,7 @@ class MAML:
                     if FLAGS.setseed:
                         set_seed(weights_a,j)
                     apply_grad(weights_a,fast_weights_a,inputa,labela)
-                    print('weights=',weights.trainable_weights)
-                    print('weights_a=',weights_a.trainable_weights)
-                    print('fast_weights_a',fast_weights_a)
+
                     # traditional val loss
                     neg_log_likelihood_cross = neg_L(weights_a,inputb,labelb)
 
