@@ -66,6 +66,7 @@ flags.DEFINE_bool('conv', True, 'whether or not to use a convolutional network, 
 flags.DEFINE_bool('max_pool', False, 'Whether or not to use max pooling rather than strided convolutions')
 flags.DEFINE_bool('stop_grad',False, 'if True, do not use second derivatives in meta-optimization (for speed)')
 flags.DEFINE_bool('determ',False, 'if True, use the original deterministic NN (for DEBUG)')
+flags.DEFINE_bool('redim',False, 'if True, reinterpreted_batch_ndims set to real dims')
 
 ## Logging, saving, and testing options
 flags.DEFINE_bool('log', True, 'if false, do not log summaries, for debugging code.')
@@ -162,7 +163,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
                 print_str = 'Iteration ' + str(itr - FLAGS.pretrain_iterations)
             print_str += ': ' + str(np.mean(prelosses)) + ', ' + str(np.mean(postlosses))
             print(print_str)
-            print(model.weights.get_weights()) # # DEBUG:
+            #print(model.weights.get_weights()) # # DEBUG:
 
             '''
             result_debug = sess.run([model.total_loss1] +  model.total_losses2 + [model.total_accuracy1] + model.total_accuracies2, feed_dict)  #!!!!!
@@ -328,7 +329,7 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
             #print(sess.run(model.outputas))
             #print(sess.run(model.weights_output.layers[0].kernel_posterior.mean()))
         print('TEST:',_)
-        print('result=',result)
+        print('result=',result[0],result[-1])
 
         metaval_accuracies.append(result)
 
@@ -340,8 +341,13 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
     print('Mean validation accuracy/loss, stddev, and confidence intervals')
     print((means, stds, ci95))
 
-    out_filename = FLAGS.logdir +'/'+ exp_string + '/' + 'test_ubs' + str(FLAGS.update_batch_size) + '_stepsize' + str(FLAGS.update_lr) + '.csv'
-    out_pkl = FLAGS.logdir +'/'+ exp_string + '/' + 'test_ubs' + str(FLAGS.update_batch_size) + '_stepsize' + str(FLAGS.update_lr) + '.pkl'
+    #print(FLAGS.logdir)
+
+    out_filename = os.path.join(FLAGS.logdir ,  exp_string + '/' + 'test_ubs' + str(FLAGS.update_batch_size) + '_stepsize' + str(FLAGS.update_lr) + '.csv')
+    out_pkl = os.path.join(FLAGS.logdir ,  exp_string + '/' + 'test_ubs' + str(FLAGS.update_batch_size) + '_stepsize' + str(FLAGS.update_lr) + '.pkl')
+    #print('out_filename=',out_filename)
+    #print('out_pkl=',out_pkl)
+
     with open(out_pkl, 'wb') as f:
         pickle.dump({'mses': metaval_accuracies}, f)
     with open(out_filename, 'w') as f:
@@ -500,7 +506,8 @@ def main():
     if FLAGS.train_update_lr == -1:
         FLAGS.train_update_lr = FLAGS.update_lr
 
-    exp_string = 'cls_'+str(FLAGS.num_classes)+'.mbs_'+str(FLAGS.meta_batch_size) + '.ubs_' + str(FLAGS.train_update_batch_size) + '.numstep' + str(FLAGS.num_updates) + '.updatelr' + str(FLAGS.train_update_lr)+'.meta_loss'+str(FLAGS.meta_loss)+'.debug'+str(FLAGS.debug)+'.alias'+FLAGS.alias
+
+    exp_string = 'cls_'+str(FLAGS.num_classes)+'.mbs_'+str(FLAGS.meta_batch_size) + '.ubs_' + str(FLAGS.train_update_batch_size)  + '.numstep' + str(FLAGS.num_updates)  + '.updatelr' + str(FLAGS.train_update_lr)+'.meta_loss'+str(FLAGS.meta_loss)+'.debug'+str(FLAGS.debug)+'.alias'+FLAGS.alias
 
     if FLAGS.one_sample:
         exp_string += 'one_sample'
@@ -528,106 +535,22 @@ def main():
 
     tf.global_variables_initializer().run()
     tf.train.start_queue_runners()
-    '''
-    it = sess.run(input_tensors)
-    with open('input_tensors.pkl', 'wb') as handle:
-        pickle.dump(it, handle)
-    print('dim_input=',dim_input)
-    print('dim_output=',dim_output)
 
-    print('test_1:')
-    print(tf.cast(inputa[0], tf.float32))
-    print(sess.run(model.weights.layers[1].kernel_posterior.mean()))
-    #print(sess.run(model.weights_cp.layers[0].kernel_posterior.mean()))
-    print(sess.run(model.weights_test[0].layers[1].kernel_posterior.mean()))
-    print(model.inputa)
-    print('model.inputa_check=',model.inputa_check)
-    print('output_weights_test')
-    print(sess.run(model.task_outputa))
-    print(sess.run(model.task_outputa))
-    print('output_weights')
-    print(sess.run(model.task_outputa_test))
-    print(sess.run(model.task_outputa_test))
-
-
-    for i, layer in enumerate(model.weights_test[0].layers):
-        print(i)
-        try:
-            print('layer',i)
-            print(sess.run(layer.kernel_posterior.mean()))
-            print(sess.run(layer.kernel_posterior.variance()))
-            print(sess.run(layer.bias_posterior.mean()))
-            print(sess.run(layer.bias_posterior.variance()))
-        except AttributeError:
-            continue
-
-    inputa_1 = np.array([[[-4.99885625],
-        [-1.97667427],
-        [-3.53244109],
-        [-4.07661405],
-        [-3.13739789],
-        [-1.54439273],
-        [-1.03232526],
-        [ 0.38816734],
-        [-0.80805486],
-        [ 1.852195  ]]])
-    print(sess.run(model.weights_test[0](tf.cast(inputa_1[0], tf.float32))))
-    print(sess.run(model.weights_test[0](tf.cast(inputa_1[0], tf.float32))))
-    '''
     if FLAGS.resume or not FLAGS.train:
         #print(FLAGS.logdir + '/' + exp_string)
         print(os.path.join(FLAGS.logdir,exp_string))
         model_file = tf.train.latest_checkpoint(os.path.join(FLAGS.logdir,exp_string))
-        if FLAGS.test_iter > 0:
+        if FLAGS.test_iter > 0:   # usually not used
             model_file = model_file[:model_file.index('model')] + 'model' + str(FLAGS.test_iter)
         if model_file:
             ind1 = model_file.index('model')
             resume_itr = int(model_file[ind1+5:])
             print("Restoring model weights from " + model_file)
             saver.restore(sess, model_file)
+        else:
+            print(os.path.join(FLAGS.logdir,exp_string) + '   not found')
 
-    #print(inputa[0])
-    '''
-    for i, layer in enumerate(model.weights_test[0].layers):
-        print(i)
-    	try:
-            print('layer',i)
-            print(sess.run(layer.kernel_posterior.mean()))
-            print(sess.run(layer.kernel_posterior.variance()))
-            print(sess.run(layer.bias_posterior.mean()))
-            print(sess.run(layer.bias_posterior.variance()))
-        except AttributeError:
-            continue
 
-    inputa_1 = np.array([[[-4.99885625],
-        [-1.97667427],
-        [-3.53244109],
-        [-4.07661405],
-        [-3.13739789],
-        [-1.54439273],
-        [-1.03232526],
-        [ 0.38816734],
-        [-0.80805486],
-        [ 1.852195  ]]])
-    print(sess.run(model.weights_test[0](tf.cast(inputa_1[0], tf.float32))))
-    print(sess.run(model.weights_test[0](tf.cast(inputa_1[0], tf.float32))))
-    #print(sess.run(model.weights_test(inputa[0])))
-
-    print('test_2:')
-    print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
-    #print(sess.run(model.weights_cp.layers[0].kernel_posterior.mean()))
-    print(sess.run(model.weights_test[0].layers[0].kernel_posterior.mean()))
-    #print(sess.run(model.weights_test(inputa[0])))
-    print(model.inputa)
-    print('model.inputa_check=',model.inputa_check)
-    print('output_weights_test')
-    print(sess.run(model.task_outputa))
-    print(sess.run(model.task_outputa))
-    print(sess.run(model.task_lossa))
-    print('output_weights')
-    print(sess.run(model.task_outputa_test))
-    print(sess.run(model.task_outputa_test))
-    '''
     if FLAGS.train:
         #print tf.get_default_graph().as_graph_def()
         #for i, var in enumerate(saver._var_list):
@@ -640,22 +563,6 @@ def main():
         test(model, saver, sess, exp_string, data_generator, test_num_updates)
         #for i, var in enumerate(saver._var_list):
         #    print('Var {}: {}'.format(i, var))
-        '''
-        print('test_3:')
-        print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
-        #print(sess.run(model.weights_cp.layers[0].kernel_posterior.mean()))
-        print(sess.run(model.weights_test[0].layers[0].kernel_posterior.mean()))
-        #print(sess.run(model.weights_test[0].trainable_weights))
-        #print(sess.run(model.weights_test[0].layers[1].kernel_posterior))
-        print('model.inputa=',model.inputa)
-        print('model.inputa_check=',model.inputa_check)
-        print('output_weights_test')
-        print(sess.run(model.task_outputa))
-        print(sess.run(model.task_outputa))
-        print(sess.run(model.task_lossa))
-        print('output_weights')
-        print(sess.run(model.task_outputa_test))
-        print(sess.run(model.task_outputa_test))
-        '''
+
 if __name__ == "__main__":
     main()

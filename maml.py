@@ -240,7 +240,10 @@ class MAML:
             if FLAGS.train:
                 num_updates = FLAGS.num_updates
             else:
-                num_updates = self.test_num_updates
+                if FLAGS.test_num_updates==-1:
+                    num_updates = self.test_num_updates
+                else:
+                    num_updates = FLAGS.test_num_updates
 
             outputbs = [[]]*num_updates
             lossesb = [[]]*num_updates
@@ -307,21 +310,24 @@ class MAML:
             def output_weights(model_out,fast_weights):
                 j=0
                 for i, layer in enumerate(model_out.layers):
-                    print(i,layer)
-                    print('j=',j)
+                    #print(i,layer)
+                    #print('j=',j)
                     try:
-                        print(layer.kernel_posterior)
-                        layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=1)
-                        #layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=len(layer.kernel_posterior.mean().shape))
+                        #print(layer.kernel_posterior)
+
+                        if FLAGS.redim:
+                            layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=len(layer.kernel_posterior.mean().shape))
+                        else:
+                            layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=1)
                         layer.bias_posterior =  tfd.Independent(tfd.Deterministic(loc=fast_weights[j+2]) ,reinterpreted_batch_ndims=1)
                         j+=3
-                        print('tfp')
+                        #print('tfp')
 
                     except AttributeError:
                         #for i in range(len(layer.trainable_weights)):
                             #layer.trainable_weights[i] = fast_weights[j]
                             #j+=1
-                        print('norm')
+                        #print('norm')
                         continue
 
             '''
@@ -336,8 +342,11 @@ class MAML:
             def deter(model_out,model):
                 for i, layer in enumerate(model_out.layers):
                     try:
-                        layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001) ,reinterpreted_batch_ndims=1)
-                        #layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001) ,reinterpreted_batch_ndims=len(model.layers[i].kernel_posterior.mean().shape))
+                        if FLAGS.redim:
+                            layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001) ,reinterpreted_batch_ndims=len(model.layers[i].kernel_posterior.mean().shape))
+                        else:
+                            layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=model.layers[i].kernel_posterior.mean(),scale=0.000000001) ,reinterpreted_batch_ndims=1)
+
                         layer.bias_posterior = tfd.Independent(tfd.Deterministic(loc=model.layers[i].bias_posterior.mean()) ,reinterpreted_batch_ndims=1)
                     except AttributeError:
                         #for j in range(len(layer.trainable_weights)):
@@ -415,7 +424,7 @@ class MAML:
                 # initialize weights_a , fast_weights_a, weights_b, fast_weights_b
                 fast_weights_a = len(weights.trainable_weights) * [None]
                 copy_tf(fast_weights_a,weights.trainable_weights)
-                #fast_weights_b = len(weights.trainable_weights) * [None]
+                fast_weights_b = len(weights.trainable_weights) * [None]
                 #copy_tf(fast_weights_b,weights.trainable_weights)
                 output_weights(weights_a,fast_weights_a)
                 '''
@@ -469,42 +478,42 @@ class MAML:
                     task_lossesb.append(self.loss_func(task_output, tf.cast(labelb, tf.float32)))
 
                     # posterior b
-                    '''
+
                     copy_tf(fast_weights_b,fast_weights_a)
                     output_weights(weights_b,fast_weights_b)
 
                     if FLAGS.setseed:
                         set_seed(weights_a,j)
                     apply_grad(weights_b,fast_weights_b,inputb,labelb)
-                    '''
+
                     #apply_grad(weights_b,fast_weights_b,tf.concat([inputa,inputb],0),tf.concat([labela,labelb],0))
 
                     # define the loss op
-                    '''
+
                     fw_a_stop = [tf.stop_gradient(weight) for weight in fast_weights_a]
                     output_weights(weights_a_stop,fw_a_stop)
 
                     fw_b_stop = [tf.stop_gradient(weight) for weight in fast_weights_b]
                     output_weights(weights_b_stop,fw_b_stop)
-                    '''
+
                     lossb_abq = []
                     lossb_ab_kl =[]
                     lossb_bq =[]
                     lossb_ab_xe=[]
 
-                    '''
-                    for i, layer in enumerate(weights.layers):
-                        try:
-                            #q = layer.kernel_posterior
-                            q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()) ,reinterpreted_batch_ndims=1)
-                            lossb_abq.append( - weights_a_stop.layers[i].kernel_posterior.cross_entropy(q) + weights_b_stop.layers[i].kernel_posterior.cross_entropy(q) )
-                            lossb_ab_kl.append( weights_b_stop.layers[i].kernel_posterior.kl_divergence(weights_a.layers[i].kernel_posterior))
-                            lossb_bq.append(weights_b_stop.layers[i].kernel_posterior.cross_entropy(q))
-                            lossb_ab_xe.append(  weights_b_stop.layers[i].kernel_posterior.cross_entropy(weights_a.layers[i].kernel_posterior))
-                            lossb_ab_xe.append(  weights_b_stop.layers[i].bias_posterior.cross_entropy(weights_a.layers[i].bias_posterior))
-                        except AttributeError:
-                            continue
-                    '''
+                    if FLAGS.redim:
+                        for i, layer in enumerate(weights.layers):
+                            try:
+                                #q = layer.kernel_posterior
+                                #q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()) ,reinterpreted_batch_ndims=1)
+                                q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()) ,reinterpreted_batch_ndims=len(layer.kernel_posterior.mean().shape))
+                                lossb_abq.append( - weights_a_stop.layers[i].kernel_posterior.cross_entropy(q) + weights_b_stop.layers[i].kernel_posterior.cross_entropy(q) )
+                                lossb_ab_kl.append( weights_b_stop.layers[i].kernel_posterior.kl_divergence(weights_a.layers[i].kernel_posterior))
+                                lossb_bq.append(weights_b_stop.layers[i].kernel_posterior.cross_entropy(q))
+                                lossb_ab_xe.append(  weights_b_stop.layers[i].kernel_posterior.cross_entropy(weights_a.layers[i].kernel_posterior))
+                                lossb_ab_xe.append(  weights_b_stop.layers[i].bias_posterior.cross_entropy(weights_a.layers[i].bias_posterior))
+                            except AttributeError:
+                                continue
 
                     if FLAGS.meta_loss == 'abq':
                         meta_loss = sum(lossb_abq)
@@ -627,7 +636,7 @@ class MAML:
             tf.summary.scalar(prefix+'Pre-update accuracy', total_accuracy1)
 
         for j in range(num_updates):
-            print('total_losses2[j]=',total_losses2[j])
+            #print('total_losses2[j]=',total_losses2[j])
             tf.summary.scalar(prefix+'Post-update loss, step ' + str(j+1), total_losses2[j])
             if self.classification:
                 tf.summary.scalar(prefix+'Post-update accuracy, step ' + str(j+1), total_accuracies2[j])
