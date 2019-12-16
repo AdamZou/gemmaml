@@ -23,8 +23,8 @@ import matplotlib
 matplotlib.use("Agg")
 from matplotlib import figure  # pylint: disable=g-import-not-at-top
 from matplotlib.backends import backend_agg
-import numpy as np
-import tensorflow as tf
+#import numpy as np
+#import tensorflow as tf
 import tensorflow_probability as tfp
 tfd = tfp.distributions
 #import keras.layers as kl
@@ -69,6 +69,7 @@ class MAML:
         self.dim_output = dim_output
         self.update_lr = FLAGS.update_lr
         self.meta_lr = tf.placeholder_with_default(FLAGS.meta_lr, ())
+        self.prior_lr = FLAGS.prior_lr
         self.classification = False
         self.test_num_updates = test_num_updates
         if FLAGS.datasource == 'sinusoid':
@@ -204,15 +205,18 @@ class MAML:
                 print('reuse!!!')
                 training_scope.reuse_variables()
                 weights = self.weights
+                prior_weights = self.prior_weights
 
 
             else:
-                print('it is fine')
+                print('no reuse')
                 # Define the weights /  weights stands for the model nueral_net!!!!!!!
                 # run models with array input to initialize models
                 #random.seed(7)
                 self.weights = weights = self.construct_weights()
                 weights(self.inputa_init[0])
+                self.prior_weights= prior_weights = self.construct_weights()
+                prior_weights(self.inputa_init[0])
 
             weights_a = self.construct_weights()
             weights_a(self.inputa_init[0])
@@ -309,11 +313,12 @@ class MAML:
 
             def output_weights(model_out,fast_weights):
                 j=0
+                print('len_fast_weights=',len(fast_weights))
                 for i, layer in enumerate(model_out.layers):
                     #print(i,layer)
-                    #print('j=',j)
+                    print('j=',j)
                     try:
-                        #print(layer.kernel_posterior)
+                        print(layer.kernel_posterior)  #  don't delete, very important
 
                         if FLAGS.redim:
                             layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=len(layer.kernel_posterior.mean().shape))
@@ -358,12 +363,35 @@ class MAML:
                 neg_log_likelihood = self.loss_func(task_output, tf.cast(label, tf.float32))
                 return neg_log_likelihood
 
+            def ELBO(model, input, label):
+                neg_log_likelihood = neg_L(model, input , label)
+                if FLAGS.separate_prior:
+                    set_prior(model,self.prior_weights)
+                else:
+                    set_prior(model,self.weights)
+
+                #kl = sum(model.losses) / tf.cast(tf.size(input), tf.float32)
+
+                kl = sum(model.losses)
+                elbo_loss = neg_log_likelihood + kl
+                return elbo_loss
+
 
             def apply_grad(model, fast_weights, input, label):
 
                 if not FLAGS.determ:
                     neg_log_likelihood = neg_L(model, input , label)
-                    kl = sum(model.losses) / tf.cast(tf.size(input), tf.float32)  #???
+                    if FLAGS.separate_prior:
+                        set_prior(model,self.prior_weights)
+                    else:
+                        set_prior(model,self.weights)  #..
+
+                    #kl = sum(model.losses) / tf.cast(tf.size(input), tf.float32)  #???
+                    kl = sum(model.losses)
+
+                    if FLAGS.no_prior:
+                        kl = 0
+
                 else:
                     deter(weights_output,model)
                     neg_log_likelihood = neg_L(weights_output, input , label)
@@ -408,18 +436,20 @@ class MAML:
                     except AttributeError:
                         continue
 
-            set_prior(weights_a,weights)
-            set_prior(weights_b,weights)
+            set_prior(weights_a,prior_weights)
+            set_prior(weights_b,prior_weights)
 
 
 
             def task_metalearn(inp, reuse=True):
                 """ Perform gradient descent for one task in the meta-batch. """
                 inputa, inputb, labela, labelb = inp
-                task_outputbs, task_lossesb, task_lossesb_op = [], [], []
+                task_outputbs, task_lossesb, task_lossesb_op, prior_lossesb_op = [], [], [], []
                 if self.classification:
                     task_accuraciesb = []
 
+                if FLAGS.determ:
+                    deter(weights,weights)
 
                 # initialize weights_a , fast_weights_a, weights_b, fast_weights_b
                 fast_weights_a = len(weights.trainable_weights) * [None]
@@ -470,7 +500,11 @@ class MAML:
                     apply_grad(weights_a,fast_weights_a,inputa,labela)
 
                     # traditional val loss
-                    neg_log_likelihood_cross = neg_L(weights_a,inputb,labelb)
+                    if FLAGS.meta_elbo:
+                        neg_log_likelihood_cross =  ELBO(weights_a,inputb,labelb)
+                    else:
+                        neg_log_likelihood_cross =  neg_L(weights_a,inputb,labelb)
+
 
                     deter(weights_output,weights_a)
                     task_output = weights_output(tf.cast(inputb, tf.float32))
@@ -499,51 +533,93 @@ class MAML:
                     lossb_abq = []
                     lossb_ab_kl =[]
                     lossb_bq =[]
+                    lossb_bq_kl =[]
+                    lossb_qb_kl =[]
                     lossb_ab_xe=[]
+                    lossb_bq_l2 = []
+                    lossb_bq_dev_l2 = []
 
                     if FLAGS.redim:
-                        for i, layer in enumerate(weights.layers):
+                        if FLAGS.separate_prior:
+                            model_q = prior_weights
+                        else:
+                            model_q = weights
+                        for i, layer in enumerate(model_q.layers):
                             try:
                                 #q = layer.kernel_posterior
                                 #q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()) ,reinterpreted_batch_ndims=1)
                                 q = tfd.Independent(tfd.Normal(loc=layer.kernel_posterior.mean(),scale=layer.kernel_posterior.stddev()) ,reinterpreted_batch_ndims=len(layer.kernel_posterior.mean().shape))
                                 lossb_abq.append( - weights_a_stop.layers[i].kernel_posterior.cross_entropy(q) + weights_b_stop.layers[i].kernel_posterior.cross_entropy(q) )
                                 lossb_ab_kl.append( weights_b_stop.layers[i].kernel_posterior.kl_divergence(weights_a.layers[i].kernel_posterior))
-                                lossb_bq.append(weights_b_stop.layers[i].kernel_posterior.cross_entropy(q))
+                                lossb_bq.append( weights_b_stop.layers[i].kernel_posterior.cross_entropy(q))  #  +
+                                lossb_bq_kl.append( weights_b_stop.layers[i].kernel_posterior.kl_divergence(q))
+                                lossb_qb_kl.append(q.kl_divergence(weights_b_stop.layers[i].kernel_posterior))
                                 lossb_ab_xe.append(  weights_b_stop.layers[i].kernel_posterior.cross_entropy(weights_a.layers[i].kernel_posterior))
                                 lossb_ab_xe.append(  weights_b_stop.layers[i].bias_posterior.cross_entropy(weights_a.layers[i].bias_posterior))
+                                lossb_bq_l2.append(tf.reduce_sum(tf.squared_difference(layer.kernel_posterior.mean(),weights_b_stop.layers[i].kernel_posterior.mean())) + tf.reduce_sum(tf.squared_difference(layer.bias_posterior.mean(),weights_b_stop.layers[i].bias_posterior.mean())))
+                                lossb_bq_dev_l2.append(tf.reduce_sum(tf.squared_difference(layer.kernel_posterior.mean(),weights_b_stop.layers[i].kernel_posterior.mean())) + tf.reduce_sum(tf.squared_difference(layer.bias_posterior.mean(),weights_b_stop.layers[i].bias_posterior.mean())) + FLAGS.dev_weight * tf.reduce_sum(tf.squared_difference(layer.kernel_posterior.stddev(),weights_b_stop.layers[i].kernel_posterior.stddev())))
+
                             except AttributeError:
                                 continue
 
                     if FLAGS.meta_loss == 'abq':
-                        meta_loss = sum(lossb_abq)
+                        meta_loss = tf.reduce_sum(lossb_abq)
                     if FLAGS.meta_loss == 'ab_kl':
-                        meta_loss = sum(lossb_ab_kl)
+                        meta_loss = tf.reduce_sum(lossb_ab_kl)
                     if FLAGS.meta_loss == 'ab_xe':
-                        meta_loss = sum(lossb_ab_xe)
+                        meta_loss = tf.reduce_sum(lossb_ab_xe)
                     if FLAGS.meta_loss == 'bq':
-                        meta_loss = sum(lossb_bq)
+                        meta_loss = tf.reduce_sum(lossb_bq)
+                    if FLAGS.meta_loss == 'bq_kl':
+                        meta_loss = tf.reduce_sum(lossb_bq_kl)
+                    if FLAGS.meta_loss == 'qb_kl':
+                        meta_loss = tf.reduce_sum(lossb_qb_kl)
+                    if FLAGS.meta_loss == 'bq_l2':
+                        meta_loss = tf.reduce_sum(lossb_bq_l2)
+                    if FLAGS.meta_loss == 'bq_dev_l2':
+                        meta_loss = tf.reduce_sum(lossb_bq_dev_l2)
 
+                    if FLAGS.meta_loss == 'b*a':
+                        meta_loss = neg_log_likelihood_cross
+
+
+                    '''
                     if FLAGS.meta_loss == 'a':
                         meta_loss = neg_log_likelihood_a
                     if FLAGS.meta_loss == 'b':
                         meta_loss = neg_log_likelihood_b
                     if FLAGS.meta_loss == 'b-a':
                         meta_loss = neg_log_likelihood_b - neg_log_likelihood_a
-                    if FLAGS.meta_loss == 'b*a':
-                        meta_loss = neg_log_likelihood_cross
+
                     if FLAGS.meta_loss == 'dumb_loss':
                         meta_loss = neg_log_likelihood_dumb_b
                     if FLAGS.meta_loss == 'dumb_b-a':
                         meta_loss = -(neg_log_likelihood_dumb_b - neg_log_likelihood_dumb_a)
+                    '''
+                    #task_lossesb_op.append(neg_log_likelihood_cross + sum(lossb_bq))  #  !!!!!
 
-                    task_lossesb_op.append(meta_loss)
-                    if FLAGS.determ:
-                        task_lossesb_op = task_lossesb
+                    if FLAGS.separate_prior:
+                        task_lossesb_op.append(neg_log_likelihood_cross)
+                        prior_lossesb_op.append(meta_loss)
+                    else:
+                        task_lossesb_op.append(meta_loss)
+                        prior_lossesb_op.append(meta_loss)
+
+
+
+
+                '''
+                if FLAGS.determ:
+                    task_lossesb_op = task_lossesb
+
+                if FLAGS.inverse:
+                    for i in range(len(task_lossesb_op)):
+                        task_lossesb_op[i] = (-1) * task_lossesb_op[i]
+                '''
 
                 # end for
                 #self.outb_last=task_outputb    #!!!!!!!!!
-                task_output = [task_outputa, task_outputbs, task_lossa, task_lossesb, task_lossa_op, task_lossesb_op ]
+                task_output = [task_outputa, task_outputbs, task_lossa, task_lossesb, task_lossa_op, task_lossesb_op ,prior_lossesb_op]
 
                 if self.classification:
                     task_accuracya = tf.contrib.metrics.accuracy(tf.argmax(tf.nn.softmax(task_outputa), 1), tf.argmax(labela, 1))
@@ -566,13 +642,13 @@ class MAML:
                 out_dtype.extend([tf.float32, [tf.float32]*num_updates])
             #result = tf.map_fn(task_metalearn, elems=(self.inputa, self.inputb, self.labela, self.labelb), dtype=out_dtype, parallel_iterations=FLAGS.meta_batch_size)
 
-            outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op, accuraciesa, accuraciesb = [None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task, [None]*N_task
+            outputas, outputbs, lossesa, lossesb, lossesa_op, lossesb_op,prior_op, accuraciesa, accuraciesb = [None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task,[None]*N_task, [None]*N_task,[None]*N_task
             for i in range(N_task):
                 elems=(self.inputa[i], self.inputb[i], self.labela[i], self.labelb[i])
                 if self.classification:
-                    outputas[i], outputbs[i], lossesa[i], lossesb[i], lossesa_op[i], lossesb_op[i], accuraciesa[i], accuraciesb[i] = task_metalearn(elems)
+                    outputas[i], outputbs[i], lossesa[i], lossesb[i], lossesa_op[i], lossesb_op[i], prior_op[i], accuraciesa[i], accuraciesb[i] = task_metalearn(elems)
                 else:
-                    outputas[i], outputbs[i], lossesa[i], lossesb[i], lossesa_op[i], lossesb_op[i]  = task_metalearn(elems)
+                    outputas[i], outputbs[i], lossesa[i], lossesb[i], lossesa_op[i], lossesb_op[i], prior_op[i] = task_metalearn(elems)
 
             self.outputas = outputas
             self.outputbs = outputbs
@@ -586,6 +662,8 @@ class MAML:
         #print('outshape=',lossesa.shape)
         lossesb = tf.transpose(lossesb)   # get the correct form of lossesb
         lossesb_op = tf.transpose(lossesb_op)
+        prior_op = tf.transpose(prior_op)
+
         if self.classification:
             accuraciesb = tf.transpose(accuraciesb)
             self.accuraciesb = accuraciesb
@@ -600,6 +678,8 @@ class MAML:
             self.total_loss1_op = total_loss1_op = tf.reduce_sum(lossesa_op) / tf.to_float(FLAGS.meta_batch_size)
             #lossesb_op_trans = tf.transpose(lossesb_op)
             self.total_losses2_op = total_losses2_op = [tf.reduce_sum(lossesb_op[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]
+            self.total_prior_op = total_prior_op = [tf.reduce_sum(prior_op[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]
+
             #self.total_losses2_op = total_losses2_op = [lossesb_op[j] for j in range(num_updates)]
             #self.total_losses2_op = total_losses2_op = lossesb_op[0]
             # after the map_fn
@@ -615,10 +695,17 @@ class MAML:
  ######  ##### optimize meta loss func
             if FLAGS.metatrain_iterations > 0:
                 optimizer = tf.train.AdamOptimizer(self.meta_lr)
-                self.gvs = gvs = optimizer.compute_gradients(self.total_losses2_op[FLAGS.num_updates-1])
-                if FLAGS.datasource == 'miniimagenet':
-                    gvs = [(tf.clip_by_value(grad, -10, 10), var) for grad, var in gvs]
+                self.gvs = gvs = optimizer.compute_gradients(self.total_losses2_op[num_updates-1])
+                print('gvs=',gvs)
+                if FLAGS.datasource == 'miniimagenet' or ('bq' in FLAGS.meta_loss):
+                    gvs = [(tf.clip_by_value(grad, -10, 10), var) if grad is not None else (grad,var) for grad, var in gvs]
                 self.metatrain_op = optimizer.apply_gradients(gvs)
+
+                optimizer = tf.train.AdamOptimizer(self.prior_lr)
+                self.prior_gvs = prior_gvs = optimizer.compute_gradients(self.total_prior_op[num_updates-1])
+                if FLAGS.datasource == 'miniimagenet':
+                    prior_gvs = [(tf.clip_by_value(grad, -10, 10), var) for grad, var in prior_gvs]
+                self.priortrain_op = optimizer.apply_gradients(prior_gvs)
         else:
             self.metaval_total_loss1 = total_loss1 = tf.reduce_sum(lossesa) / tf.to_float(FLAGS.meta_batch_size)
             self.metaval_total_losses2 = total_losses2 = [tf.reduce_sum(lossesb[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]

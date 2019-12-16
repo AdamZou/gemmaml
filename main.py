@@ -26,6 +26,7 @@ Usage Instructions:
 
     For omniglot and miniimagenet training, acquire the dataset online, put it in the correspoding data directory, and see the python script instructions in that directory to preprocess the data.
 """
+
 import csv
 import numpy as np
 import pickle
@@ -52,12 +53,14 @@ flags.DEFINE_integer('pretrain_iterations', 0, 'number of pre-training iteration
 flags.DEFINE_integer('metatrain_iterations', 15000, 'number of metatraining iterations.') # 15k for omniglot, 50k for sinusoid
 flags.DEFINE_integer('meta_batch_size', 10, 'number of tasks sampled per meta-update')
 flags.DEFINE_float('meta_lr', 0.001, 'the base learning rate of the generator')
+flags.DEFINE_float('prior_lr', 0.001, 'the base learning rate of the generator')
 flags.DEFINE_integer('update_batch_size', 10, 'number of examples used for inner gradient update (K for K-shot learning).')
 flags.DEFINE_float('update_lr', 1e-3, 'step size alpha for inner gradient update.') # 0.1 for omniglot
 flags.DEFINE_integer('num_updates', 1, 'number of inner gradient updates during training.')
 flags.DEFINE_string('meta_loss', 'b*a', 'type of the meta loss function.')
 flags.DEFINE_bool('one_sample', False, 'use the same sample for all training iterations or not')
 flags.DEFINE_bool('setseed', False, 'use the same seed in one loop')
+flags.DEFINE_float('dev_weight', 1e-4, 'weight of dev different in meta loss func')
 
 ## Model options
 flags.DEFINE_string('norm', 'batch_norm', 'batch_norm, layer_norm, or None')
@@ -67,6 +70,10 @@ flags.DEFINE_bool('max_pool', False, 'Whether or not to use max pooling rather t
 flags.DEFINE_bool('stop_grad',False, 'if True, do not use second derivatives in meta-optimization (for speed)')
 flags.DEFINE_bool('determ',False, 'if True, use the original deterministic NN (for DEBUG)')
 flags.DEFINE_bool('redim',False, 'if True, reinterpreted_batch_ndims set to real dims')
+flags.DEFINE_bool('inverse',False, 'if True, inverse the maml loss function')
+flags.DEFINE_bool('separate_prior',False, 'if True, separate the training of prior and initial point')
+flags.DEFINE_bool('no_prior',False, 'if True, set KL=0 in inner-update steps')
+flags.DEFINE_bool('meta_elbo',False, 'if True, use elbo_loss in meta_update steps')
 
 ## Logging, saving, and testing options
 flags.DEFINE_bool('log', True, 'if false, do not log summaries, for debugging code.')
@@ -80,12 +87,15 @@ flags.DEFINE_float('train_update_lr', -1, 'value of inner gradient step step dur
 flags.DEFINE_integer('test_num_updates', -1, 'number of inner gradient updates during testing.')
 flags.DEFINE_bool('debug',False, 'if True, only very few samples will be generated in data (for DEBUG)')
 flags.DEFINE_string('alias', '', 'it is used to distinguish different models in saving paths')
+flags.DEFINE_string('model_file', None, 'model file for continual training')
+flags.DEFINE_bool('construct_only',False, 'if True, only construct models and skip training or testing')
+
 
 def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
     SUMMARY_INTERVAL = 100
     SAVE_INTERVAL = 1000
     if FLAGS.datasource == 'sinusoid':
-        PRINT_INTERVAL = 1000   #!!!!!!!
+        PRINT_INTERVAL = 1000   #!!!!!!! 1000
         TEST_PRINT_INTERVAL = PRINT_INTERVAL*5
     else:
         PRINT_INTERVAL = 100
@@ -134,7 +144,11 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
 	        input_tensors = [model.pretrain_op]
         else:
 ##### metatrain_op
-            input_tensors = [model.metatrain_op]
+            if FLAGS.separate_prior:
+                input_tensors = [model.metatrain_op, model.priortrain_op]
+            else:
+                input_tensors = [model.metatrain_op]
+
 
         if (itr % SUMMARY_INTERVAL == 0 or itr % PRINT_INTERVAL == 0):
             input_tensors.extend([model.summ_op, model.total_loss1, model.total_losses2[FLAGS.num_updates-1]])
@@ -153,7 +167,11 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
         if itr % SUMMARY_INTERVAL == 0:
             prelosses.append(result[-2])
             if FLAGS.log:
-                train_writer.add_summary(result[1], itr)
+                if FLAGS.separate_prior:
+                    train_writer.add_summary(result[2], itr)
+                else:
+                    train_writer.add_summary(result[1], itr)
+
             postlosses.append(result[-1])
 
         if (itr!=0) and itr % PRINT_INTERVAL == 0:
@@ -163,6 +181,13 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
                 print_str = 'Iteration ' + str(itr - FLAGS.pretrain_iterations)
             print_str += ': ' + str(np.mean(prelosses)) + ', ' + str(np.mean(postlosses))
             print(print_str)
+
+            if FLAGS.datasource == 'sinusoid':
+                for i, layer in enumerate(model.weights.layers):
+                    try:
+                        print('layer',i,sess.run(layer.kernel_posterior.stddev(), feed_dict))
+                    except AttributeError:
+                        continue
             #print(model.weights.get_weights()) # # DEBUG:
 
             '''
@@ -538,31 +563,40 @@ def main():
 
     if FLAGS.resume or not FLAGS.train:
         #print(FLAGS.logdir + '/' + exp_string)
-        print(os.path.join(FLAGS.logdir,exp_string))
-        model_file = tf.train.latest_checkpoint(os.path.join(FLAGS.logdir,exp_string))
+
+        if FLAGS.model_file:
+            model_file_path = os.path.join(FLAGS.logdir,FLAGS.model_file)
+        else:
+            model_file_path = os.path.join(FLAGS.logdir,exp_string)
+
+        model_file = tf.train.latest_checkpoint(model_file_path)
+        print(model_file_path)
+
+        '''
         if FLAGS.test_iter > 0:   # usually not used
             model_file = model_file[:model_file.index('model')] + 'model' + str(FLAGS.test_iter)
+        '''
         if model_file:
             ind1 = model_file.index('model')
             resume_itr = int(model_file[ind1+5:])
             print("Restoring model weights from " + model_file)
             saver.restore(sess, model_file)
         else:
-            print(os.path.join(FLAGS.logdir,exp_string) + '   not found')
+            print(model_file_path + '   not found')
 
+    if not FLAGS.construct_only:
+        if FLAGS.train:
+            #print tf.get_default_graph().as_graph_def()
+            #for i, var in enumerate(saver._var_list):
+            #    print('Var {}: {}'.format(i, var))
+            print('start training')
+            train(model, saver, sess, exp_string, data_generator, resume_itr)
+        else:
 
-    if FLAGS.train:
-        #print tf.get_default_graph().as_graph_def()
-        #for i, var in enumerate(saver._var_list):
-        #    print('Var {}: {}'.format(i, var))
-        print('start training')
-        train(model, saver, sess, exp_string, data_generator, resume_itr)
-    else:
-
-        #print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
-        test(model, saver, sess, exp_string, data_generator, test_num_updates)
-        #for i, var in enumerate(saver._var_list):
-        #    print('Var {}: {}'.format(i, var))
+            #print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
+            test(model, saver, sess, exp_string, data_generator, test_num_updates)
+            #for i, var in enumerate(saver._var_list):
+            #    print('Var {}: {}'.format(i, var))
 
 if __name__ == "__main__":
     main()
