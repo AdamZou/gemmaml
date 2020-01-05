@@ -13,6 +13,7 @@ except KeyError as e:
 from tensorflow.python.platform import flags
 from utils import mse, xent, conv_block, normalize
 import random
+#import math
 
 import os
 import warnings
@@ -220,7 +221,7 @@ class MAML:
 
             weights_a = self.construct_weights()
             weights_a(self.inputa_init[0])
-            weights_b = self.construct_weights()
+            self.weights_b = weights_b = self.construct_weights()
             weights_b(self.inputa_init[0])
             weights_a_stop = self.construct_weights()
             weights_a_stop(self.inputa_init[0])
@@ -494,6 +495,8 @@ class MAML:
                     #set_seed(weights_a,j)
                     #self.check_seed_2 = neg_L(weights_a,inputa,labela)   #!!!!
 
+
+
                     # posterior a
                     if FLAGS.setseed:
                         set_seed(weights_a,j)
@@ -557,7 +560,7 @@ class MAML:
                                 lossb_ab_xe.append(  weights_b_stop.layers[i].kernel_posterior.cross_entropy(weights_a.layers[i].kernel_posterior))
                                 lossb_ab_xe.append(  weights_b_stop.layers[i].bias_posterior.cross_entropy(weights_a.layers[i].bias_posterior))
                                 lossb_bq_l2.append(tf.reduce_sum(tf.squared_difference(layer.kernel_posterior.mean(),weights_b_stop.layers[i].kernel_posterior.mean())) + tf.reduce_sum(tf.squared_difference(layer.bias_posterior.mean(),weights_b_stop.layers[i].bias_posterior.mean())))
-                                lossb_bq_dev_l2.append(tf.reduce_sum(tf.squared_difference(layer.kernel_posterior.mean(),weights_b_stop.layers[i].kernel_posterior.mean())) + tf.reduce_sum(tf.squared_difference(layer.bias_posterior.mean(),weights_b_stop.layers[i].bias_posterior.mean())) + FLAGS.dev_weight * tf.reduce_sum(tf.squared_difference(layer.kernel_posterior.stddev(),weights_b_stop.layers[i].kernel_posterior.stddev())))
+                                lossb_bq_dev_l2.append(tf.reduce_sum(tf.squared_difference(layer.kernel_posterior.mean(),weights_b_stop.layers[i].kernel_posterior.mean())) + tf.reduce_sum(tf.squared_difference(layer.bias_posterior.mean(),weights_b_stop.layers[i].bias_posterior.mean())) + FLAGS.dev_weight * tf.reduce_sum(tf.squared_difference(  layer.trainable_weights[1]  ,  weights_b_stop.layers[i].trainable_weights[1] )))
 
                             except AttributeError:
                                 continue
@@ -581,6 +584,11 @@ class MAML:
 
                     if FLAGS.meta_loss == 'b*a':
                         meta_loss = neg_log_likelihood_cross
+
+                    if FLAGS.meta_loss == 'Gab':
+                        meta_loss = neg_log_likelihood_cross + neg_L(weights,inputa,labela)
+
+
 
 
                     '''
@@ -698,6 +706,7 @@ class MAML:
                 self.gvs = gvs = optimizer.compute_gradients(self.total_losses2_op[num_updates-1])
                 print('gvs=',gvs)
                 if FLAGS.datasource == 'miniimagenet' or ('bq' in FLAGS.meta_loss):
+                #if FLAGS.datasource == 'miniimagenet':
                     gvs = [(tf.clip_by_value(grad, -10, 10), var) if grad is not None else (grad,var) for grad, var in gvs]
                 self.metatrain_op = optimizer.apply_gradients(gvs)
 

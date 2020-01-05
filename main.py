@@ -60,7 +60,7 @@ flags.DEFINE_integer('num_updates', 1, 'number of inner gradient updates during 
 flags.DEFINE_string('meta_loss', 'b*a', 'type of the meta loss function.')
 flags.DEFINE_bool('one_sample', False, 'use the same sample for all training iterations or not')
 flags.DEFINE_bool('setseed', False, 'use the same seed in one loop')
-flags.DEFINE_float('dev_weight', 1e-4, 'weight of dev different in meta loss func')
+flags.DEFINE_float('dev_weight', 1.0, 'weight of dev different in meta loss func')
 
 ## Model options
 flags.DEFINE_string('norm', 'batch_norm', 'batch_norm, layer_norm, or None')
@@ -74,6 +74,7 @@ flags.DEFINE_bool('inverse',False, 'if True, inverse the maml loss function')
 flags.DEFINE_bool('separate_prior',False, 'if True, separate the training of prior and initial point')
 flags.DEFINE_bool('no_prior',False, 'if True, set KL=0 in inner-update steps')
 flags.DEFINE_bool('meta_elbo',False, 'if True, use elbo_loss in meta_update steps')
+flags.DEFINE_bool('task_average',False, 'if True, save task average model weights for testing')
 
 ## Logging, saving, and testing options
 flags.DEFINE_bool('log', True, 'if false, do not log summaries, for debugging code.')
@@ -118,6 +119,8 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
         labelb = batch_y[:, num_classes*FLAGS.update_batch_size:, :]
         feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb}
     #
+    average_itr = 0 #    task-average algorithm
+
     for itr in range(resume_itr, FLAGS.pretrain_iterations + FLAGS.metatrain_iterations):
 
         if not FLAGS.one_sample:
@@ -157,6 +160,19 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
 
 
         result = sess.run(input_tensors, feed_dict)
+        # task-average  algorithm
+        if FLAGS.task_average:
+            if itr > FLAGS.metatrain_iterations/2:
+                if average_itr==0:
+                    task_weights_sum = sess.run(model.weights_b.trainable_weights)
+                else:
+                    w = sess.run(model.weights_b.trainable_weights)
+                    for i in range(len(task_weights_sum)):
+                        task_weights_sum[i] += w[i]
+
+                average_itr += 1
+
+
 
         #print('result_debug=',result_debug)
         #print('result=',result,'\n')
@@ -182,6 +198,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
             print_str += ': ' + str(np.mean(prelosses)) + ', ' + str(np.mean(postlosses))
             print(print_str)
 
+            # # DEBUG: print layer kernel stddev
             if FLAGS.datasource == 'sinusoid':
                 for i, layer in enumerate(model.weights.layers):
                     try:
@@ -190,45 +207,6 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
                         continue
             #print(model.weights.get_weights()) # # DEBUG:
 
-            '''
-            result_debug = sess.run([model.total_loss1] +  model.total_losses2 + [model.total_accuracy1] + model.total_accuracies2, feed_dict)  #!!!!!
-            print('result_debug=',result_debug)
-            #print('check_seed_1=',sess.run(model.check_seed_1, feed_dict))
-            #print('check_seed_2=',sess.run(model.check_seed_2, feed_dict))
-            #wa = sess.run(model.wa.trainable_weights, feed_dict)
-            #wo = sess.run(model.wo.trainable_weights, feed_dict)
-            #print('wa=',wa)
-            #print('wo=',wo)
-            #outputas, outputbs, lossesa, lossesb
-
-            #print(yoyomaki)
-            print('outputbs=',sess.run(model.outputbs, feed_dict))
-            print('inputa=',sess.run(tf.reduce_sum(model.inputa[0],axis=1), feed_dict))
-            print('labela=',sess.run(model.labela, feed_dict))
-            print('inputb=',sess.run(tf.reduce_sum(model.inputb[0],axis=1), feed_dict))
-            print('labelb=',sess.run(model.labelb, feed_dict))
-            if model.classification:
-                print('accuraciesb=',sess.run(model.accuraciesb, feed_dict))
-
-
-            print('inputa=',sess.run(inputa))
-            print('labela=',sess.run(labela))
-            print('outputas=',sess.run(model.outputas, feed_dict))
-            print('lossesa=',sess.run(model.lossesa, feed_dict))
-
-            print('inputb=',inputb)
-            print('labelb=',labelb)
-            print('outputbs=',sess.run(model.outputbs, feed_dict))
-            print('lossesb=',sess.run(model.lossesb, feed_dict))
-
-            outb = sess.run(model.outb, feed_dict)
-            lb = sess.run(model.lb, feed_dict)
-            print('taskoutputa=',sess.run(model.task_outputa, feed_dict))
-            print('taskoutputa_test=',sess.run(model.task_outputa_test, feed_dict))
-            print('outb=',outb)
-            print('outb_last=',sess.run(model.outb_last, feed_dict))
-            print('lb=',lb)
-            '''
 
 
             prelosses, postlosses = [], []
@@ -259,6 +237,16 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
             #_ = sess.run([model.pretrain_op], feed_dict)  #######?????
             result = sess.run(input_tensors, feed_dict)
             print('Validation results: ' + str(result[0]) + ', ' + str(result[1]))
+
+    # task-average algorithm
+    if FLAGS.task_average:
+        for i in range(len(task_weights_sum)):
+            task_weights_sum[i] /= float(average_itr)
+            sess.run(tf.assign(model.weights.trainable_weights[i],task_weights_sum[i]))
+
+        print('average_itr=',average_itr)
+
+    #####
 
     saver.save(sess, FLAGS.logdir + '/' + exp_string +  '/model' + str(itr))
 
