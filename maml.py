@@ -336,6 +336,7 @@ class MAML:
                         #print('norm')
                         continue
 
+
             '''
             def output_weights(model_out,fast_weights):
                 j=0
@@ -455,7 +456,7 @@ class MAML:
                 # initialize weights_a , fast_weights_a, weights_b, fast_weights_b
                 fast_weights_a = len(weights.trainable_weights) * [None]
                 copy_tf(fast_weights_a,weights.trainable_weights)
-                fast_weights_b = len(weights.trainable_weights) * [None]
+                self.fast_weights_b  = fast_weights_b = len(weights.trainable_weights) * [None]
                 #copy_tf(fast_weights_b,weights.trainable_weights)
                 output_weights(weights_a,fast_weights_a)
                 '''

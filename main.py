@@ -167,15 +167,14 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
         if FLAGS.task_average:
             if itr > FLAGS.metatrain_iterations/2:
                 if average_itr==0:
-                    task_weights_sum = sess.run(model.weights_b.trainable_weights)
+                    task_weights_sum = sess.run(model.fast_weights_b)
                 else:
-                    w = sess.run(model.weights_b.trainable_weights)
+                    w = sess.run(model.fast_weights_b)
+                    print('fast_weights_b=',w)
                     for i in range(len(task_weights_sum)):
                         task_weights_sum[i] += w[i]
 
                 average_itr += 1
-
-
 
         #print('result_debug=',result_debug)
         #print('result=',result,'\n')
@@ -202,6 +201,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
             print(print_str)
 
             # # DEBUG: print layer kernel stddev
+            '''
             if FLAGS.datasource == 'sinusoid':
                 for i, layer in enumerate(model.weights.layers):
                     try:
@@ -226,6 +226,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
                     except AttributeError:
                         continue
                 #print('weights_b=',sess.run(model.weights_b.trainable_weights, feed_dict))
+            '''
             #print(model.weights.get_weights()) # # DEBUG:
 
 
@@ -264,7 +265,8 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
         for i in range(len(task_weights_sum)):
             task_weights_sum[i] /= float(average_itr)
             sess.run(tf.assign(model.weights.trainable_weights[i],task_weights_sum[i]))
-
+        print('task_weights_sum=',task_weights_sum)
+        print('model.weights=',sess.run(model.weights.trainable_weights))
         print('average_itr=',average_itr)
 
     #####
