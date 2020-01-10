@@ -322,9 +322,9 @@ class MAML:
                         print(layer.kernel_posterior)  #  don't delete, very important
 
                         if FLAGS.redim:
-                            layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=len(layer.kernel_posterior.mean().shape))
+                            layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.softplus(fast_weights[j+1])) ,reinterpreted_batch_ndims=len(layer.kernel_posterior.mean().shape))
                         else:
-                            layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.exp(fast_weights[j+1])) ,reinterpreted_batch_ndims=1)
+                            layer.kernel_posterior =  tfd.Independent(tfd.Normal(loc=fast_weights[j],scale=tf.math.softplus(fast_weights[j+1])) ,reinterpreted_batch_ndims=1)
                         layer.bias_posterior =  tfd.Independent(tfd.Deterministic(loc=fast_weights[j+2]) ,reinterpreted_batch_ndims=1)
                         j+=3
                         #print('tfp')
@@ -560,7 +560,15 @@ class MAML:
                                 lossb_ab_xe.append(  weights_b_stop.layers[i].kernel_posterior.cross_entropy(weights_a.layers[i].kernel_posterior))
                                 lossb_ab_xe.append(  weights_b_stop.layers[i].bias_posterior.cross_entropy(weights_a.layers[i].bias_posterior))
                                 lossb_bq_l2.append(tf.reduce_sum(tf.squared_difference(layer.kernel_posterior.mean(),weights_b_stop.layers[i].kernel_posterior.mean())) + tf.reduce_sum(tf.squared_difference(layer.bias_posterior.mean(),weights_b_stop.layers[i].bias_posterior.mean())))
-                                lossb_bq_dev_l2.append(tf.reduce_sum(tf.squared_difference(layer.kernel_posterior.mean(),weights_b_stop.layers[i].kernel_posterior.mean())) + tf.reduce_sum(tf.squared_difference(layer.bias_posterior.mean(),weights_b_stop.layers[i].bias_posterior.mean())) + FLAGS.dev_weight * tf.reduce_sum(tf.squared_difference(  layer.trainable_weights[1]  ,  weights_b_stop.layers[i].trainable_weights[1] )))
+
+                                #lossb_bq_dev_l2.append(tf.reduce_sum(tf.squared_difference(layer.kernel_posterior.mean(),weights_b_stop.layers[i].kernel_posterior.mean()))/(FLAGS.update_lr) + tf.reduce_sum(tf.squared_difference(layer.bias_posterior.mean(),weights_b_stop.layers[i].bias_posterior.mean()))/(FLAGS.update_lr) + FLAGS.dev_weight * tf.reduce_sum(tf.squared_difference(  model_q.layers[i].trainable_weights[1]  ,  tf.stop_gradient(weights_b.layers[i].trainable_weights[1]) ))/(FLAGS.update_lr))
+
+                                lossb_bq_dev_l2.append(tf.reduce_sum(tf.squared_difference(layer.kernel_posterior.mean(),weights_b_stop.layers[i].kernel_posterior.mean()))/(FLAGS.update_lr) + tf.reduce_sum(tf.squared_difference(layer.bias_posterior.mean(),weights_b_stop.layers[i].bias_posterior.mean()))/(FLAGS.update_lr)
+                                + FLAGS.dev_weight * tf.reduce_sum(tf.squared_difference(  model_q.layers[i].trainable_weights[1]  ,  tfd.softplus_inverse(weights_b_stop.layers[i].kernel_posterior.stddev()) ))/(FLAGS.update_lr))
+                                #lossb_bq_dev_l2.append(tf.reduce_sum(tf.squared_difference(layer.kernel_posterior.mean(),weights_b_stop.layers[i].kernel_posterior.mean()))/FLAGS.update_lr + tf.reduce_sum(tf.squared_difference(layer.bias_posterior.mean(),weights_b_stop.layers[i].bias_posterior.mean()))/FLAGS.update_lr
+                                #+ FLAGS.dev_weight * tf.reduce_sum(tf.squared_difference(  tfd.softplus_inverse(layer.kernel_posterior.stddev())  ,  tfd.softplus_inverse(weights_b_stop.layers[i].kernel_posterior.stddev()) ))/FLAGS.update_lr)
+
+                                #lossb_bq_dev_l2.append((tf.reduce_sum(tf.squared_difference(  layer.trainable_weights[0]  ,  weights_b_stop.layers[i].trainable_weights[0] )) + tf.reduce_sum(tf.squared_difference(  layer.trainable_weights[2]  ,  weights_b_stop.layers[i].trainable_weights[2] )) +  tf.reduce_sum(tf.squared_difference(  layer.trainable_weights[1]  ,  tf.stop_gradient(weights_b_stop.layers[i].trainable_weights[1]) )) )  /FLAGS.update_lr)
 
                             except AttributeError:
                                 continue
@@ -705,8 +713,8 @@ class MAML:
                 optimizer = tf.train.AdamOptimizer(self.meta_lr)
                 self.gvs = gvs = optimizer.compute_gradients(self.total_losses2_op[num_updates-1])
                 print('gvs=',gvs)
-                if FLAGS.datasource == 'miniimagenet' or ('bq' in FLAGS.meta_loss):
-                #if FLAGS.datasource == 'miniimagenet':
+                #if FLAGS.datasource == 'miniimagenet' or ('bq' in FLAGS.meta_loss):
+                if FLAGS.datasource == 'miniimagenet':
                     gvs = [(tf.clip_by_value(grad, -10, 10), var) if grad is not None else (grad,var) for grad, var in gvs]
                 self.metatrain_op = optimizer.apply_gradients(gvs)
 

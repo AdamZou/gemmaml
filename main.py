@@ -38,6 +38,9 @@ from data_generator import DataGenerator
 from maml import MAML
 from tensorflow.python.platform import flags
 
+import tensorflow_probability as tfp
+tfd = tfp.distributions
+
 FLAGS = flags.FLAGS
 
 ## Dataset/method options
@@ -202,9 +205,27 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
             if FLAGS.datasource == 'sinusoid':
                 for i, layer in enumerate(model.weights.layers):
                     try:
-                        print('layer',i,sess.run(layer.kernel_posterior.stddev(), feed_dict))
+                        print('layer_mean',i,sess.run(layer.kernel_posterior.mean(), feed_dict))
+                        print('layer_stddev',i,sess.run(layer.kernel_posterior.stddev(), feed_dict))
                     except AttributeError:
                         continue
+
+
+
+                # print gradients
+                #print_gvs = [ ('None',var) if grad is None else (grad,var) for grad, var in model.gvs]
+                for grad, var in model.gvs:
+                    if grad is not None:
+                        print(sess.run(grad, feed_dict), var, sess.run(var, feed_dict))
+                # print weights_b
+                for i, layer in enumerate(model.weights_b.layers):
+                    try:
+                        print('weights_b_layer_mean',i,sess.run(layer.kernel_posterior.mean(), feed_dict))
+                        print('weights_b_layer_stddev',i,sess.run(layer.kernel_posterior.stddev(), feed_dict))
+                        print('weights_b_layer_unscale',i, sess.run(tfd.softplus_inverse(layer.kernel_posterior.stddev()), feed_dict) )
+                    except AttributeError:
+                        continue
+                #print('weights_b=',sess.run(model.weights_b.trainable_weights, feed_dict))
             #print(model.weights.get_weights()) # # DEBUG:
 
 
