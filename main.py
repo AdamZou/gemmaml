@@ -46,6 +46,10 @@ FLAGS = flags.FLAGS
 ## Dataset/method options
 flags.DEFINE_string('datasource', 'sinusoid', 'sinusoid or omniglot or miniimagenet')
 flags.DEFINE_integer('num_classes', 5, 'number of classes used in classification (e.g. 5-way classification).')
+flags.DEFINE_bool('hard_sin', False, 'if true, generate harder sinusoid data')
+flags.DEFINE_float('noise_factor', 0.01, 'noise_factor')
+flags.DEFINE_integer('train_total_num_tasks', 100, 'total number of tasks for training with finite dataset')
+flags.DEFINE_integer('test_total_num_tasks', 100, 'total number of tasks for evaluation')
 # oracle means task id is input (only suitable for sinusoid)
 flags.DEFINE_string('baseline', None, 'oracle, or None')
 
@@ -78,6 +82,10 @@ flags.DEFINE_bool('separate_prior',False, 'if True, separate the training of pri
 flags.DEFINE_bool('no_prior',False, 'if True, set KL=0 in inner-update steps')
 flags.DEFINE_bool('meta_elbo',False, 'if True, use elbo_loss in meta_update steps')
 flags.DEFINE_bool('task_average',False, 'if True, save task average model weights for testing')
+flags.DEFINE_bool('task_b',False, 'if True, use the last model_b weights for testing')
+flags.DEFINE_bool('weightsb',False, 'if True, use weights <= weights_b as meta_update')
+flags.DEFINE_bool('inputa_only',False, 'if True, use inputa and labela to train weights_b')
+
 
 ## Logging, saving, and testing options
 flags.DEFINE_bool('log', True, 'if false, do not log summaries, for debugging code.')
@@ -93,16 +101,17 @@ flags.DEFINE_bool('debug',False, 'if True, only very few samples will be generat
 flags.DEFINE_string('alias', '', 'it is used to distinguish different models in saving paths')
 flags.DEFINE_string('model_file', None, 'model file for continual training')
 flags.DEFINE_bool('construct_only',False, 'if True, only construct models and skip training or testing')
+flags.DEFINE_bool('print_grads_details',False, 'if True, print details like gradients, model parameters')
 
 
 def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
     SUMMARY_INTERVAL = 100
     SAVE_INTERVAL = 1000
     if FLAGS.datasource == 'sinusoid':
-        PRINT_INTERVAL = 1000   #!!!!!!! 1000
+        PRINT_INTERVAL = 100   #!!!!!!! 1000
         TEST_PRINT_INTERVAL = PRINT_INTERVAL*5
     else:
-        PRINT_INTERVAL = 100
+        PRINT_INTERVAL = 10   #!!!! 100
         TEST_PRINT_INTERVAL = PRINT_INTERVAL*5
 
     if FLAGS.log:
@@ -130,6 +139,9 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
             feed_dict = {}
 
             if 'generate' in dir(data_generator):
+                if itr % FLAGS.train_total_num_tasks == 0:
+                    np.random.seed(1)
+
                 batch_x, batch_y, amp, phase = data_generator.generate()
 
                 if FLAGS.baseline == 'oracle':
@@ -142,6 +154,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
                 labela = batch_y[:, :num_classes*FLAGS.update_batch_size, :]
                 inputb = batch_x[:, num_classes*FLAGS.update_batch_size:, :] # b used for testing
                 labelb = batch_y[:, num_classes*FLAGS.update_batch_size:, :]
+                #print('inputa=',inputa)
                 #print('inputa.shape=',inputa.shape,inputa)
                 #print('inputb.shape=',inputb.shape,inputb)
                 feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb}
@@ -150,10 +163,16 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
 	        input_tensors = [model.pretrain_op]
         else:
 ##### metatrain_op
-            if FLAGS.separate_prior:
-                input_tensors = [model.metatrain_op, model.priortrain_op]
+            if FLAGS.weightsb:
+                wb = sess.run(model.fast_weights_b,feed_dict)
+                if (itr!=0) and itr % PRINT_INTERVAL == 0:
+                    print('fast_weights_b=',wb)
+                input_tensors = [tf.assign(model.weights.trainable_weights[i],wb[i]) for i in range(len(wb))]
             else:
-                input_tensors = [model.metatrain_op]
+                if FLAGS.separate_prior:
+                    input_tensors = [model.metatrain_op, model.priortrain_op]
+                else:
+                    input_tensors = [model.metatrain_op]
 
 
         if (itr % SUMMARY_INTERVAL == 0 or itr % PRINT_INTERVAL == 0):
@@ -166,11 +185,12 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
         # task-average  algorithm
         if FLAGS.task_average:
             if itr > FLAGS.metatrain_iterations/2:
-                if average_itr==0:
-                    task_weights_sum = sess.run(model.fast_weights_b)
-                else:
-                    w = sess.run(model.fast_weights_b)
+                w = sess.run(model.fast_weights_b,feed_dict)
+                if (itr!=0) and itr % PRINT_INTERVAL == 0:
                     print('fast_weights_b=',w)
+                if average_itr==0:
+                    task_weights_sum = w
+                else:
                     for i in range(len(task_weights_sum)):
                         task_weights_sum[i] += w[i]
 
@@ -185,10 +205,13 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
         if itr % SUMMARY_INTERVAL == 0:
             prelosses.append(result[-2])
             if FLAGS.log:
+                train_writer.add_summary(result[-3], itr)
+                '''
                 if FLAGS.separate_prior:
                     train_writer.add_summary(result[2], itr)
                 else:
                     train_writer.add_summary(result[1], itr)
+                '''
 
             postlosses.append(result[-1])
 
@@ -200,33 +223,37 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
             print_str += ': ' + str(np.mean(prelosses)) + ', ' + str(np.mean(postlosses))
             print(print_str)
 
-            # # DEBUG: print layer kernel stddev
-            '''
-            if FLAGS.datasource == 'sinusoid':
-                for i, layer in enumerate(model.weights.layers):
-                    try:
-                        print('layer_mean',i,sess.run(layer.kernel_posterior.mean(), feed_dict))
-                        print('layer_stddev',i,sess.run(layer.kernel_posterior.stddev(), feed_dict))
-                    except AttributeError:
-                        continue
 
+
+
+            # # DEBUG: print layer kernel stddev
+
+            if FLAGS.datasource == 'sinusoid':
+                if FLAGS.print_grads_details:
+                    for i, layer in enumerate(model.weights.layers):
+                        try:
+                            print('layer_mean',i,sess.run(layer.kernel_posterior.mean(), feed_dict))
+                            print('layer_stddev',i,sess.run(layer.kernel_posterior.stddev(), feed_dict))
+                        except AttributeError:
+                            continue
 
 
                 # print gradients
                 #print_gvs = [ ('None',var) if grad is None else (grad,var) for grad, var in model.gvs]
-                for grad, var in model.gvs:
-                    if grad is not None:
-                        print(sess.run(grad, feed_dict), var, sess.run(var, feed_dict))
-                # print weights_b
-                for i, layer in enumerate(model.weights_b.layers):
-                    try:
-                        print('weights_b_layer_mean',i,sess.run(layer.kernel_posterior.mean(), feed_dict))
-                        print('weights_b_layer_stddev',i,sess.run(layer.kernel_posterior.stddev(), feed_dict))
-                        print('weights_b_layer_unscale',i, sess.run(tfd.softplus_inverse(layer.kernel_posterior.stddev()), feed_dict) )
-                    except AttributeError:
-                        continue
+
+                    for grad, var in model.gvs:
+                        if grad is not None:
+                            print(sess.run(grad, feed_dict), var, sess.run(var, feed_dict))
+                    # print weights_b
+                    for i, layer in enumerate(model.weights_b.layers):
+                        try:
+                            print('weights_b_layer_mean',i,sess.run(layer.kernel_posterior.mean(), feed_dict))
+                            print('weights_b_layer_stddev',i,sess.run(layer.kernel_posterior.stddev(), feed_dict))
+                            print('weights_b_layer_unscale',i, sess.run(tfd.softplus_inverse(layer.kernel_posterior.stddev()), feed_dict) )
+                        except AttributeError:
+                            continue
                 #print('weights_b=',sess.run(model.weights_b.trainable_weights, feed_dict))
-            '''
+
             #print(model.weights.get_weights()) # # DEBUG:
 
 
@@ -262,12 +289,20 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
 
     # task-average algorithm
     if FLAGS.task_average:
+
         for i in range(len(task_weights_sum)):
             task_weights_sum[i] /= float(average_itr)
             sess.run(tf.assign(model.weights.trainable_weights[i],task_weights_sum[i]))
         print('task_weights_sum=',task_weights_sum)
-        print('model.weights=',sess.run(model.weights.trainable_weights))
+        print('model.weights=',sess.run(model.weights.trainable_weights,feed_dict))
         print('average_itr=',average_itr)
+
+    if FLAGS.task_b:
+        w = sess.run(model.fast_weights_b,feed_dict)
+        for i in range(len(w)):
+            sess.run(tf.assign(model.weights.trainable_weights[i],w[i]))
+        print('fast_weights_b=',w)
+        print('model.weights=',sess.run(model.weights.trainable_weights,feed_dict))
 
     #####
 

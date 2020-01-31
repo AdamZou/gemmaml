@@ -107,6 +107,7 @@ class MAML:
         k=3
         channels = self.channels
         stride = (2,2)
+        print("dim_output=",self.dim_output)
 
         if FLAGS.norm == 'batch_norm':
             model = tf.keras.Sequential([
@@ -478,8 +479,10 @@ class MAML:
                 # output and loss for initial state
                 #deter(weights_output,weights_a)
                 deter(weights_output,weights)
-                task_outputa = task_output = weights_output(tf.cast(inputb, tf.float32))
-                task_lossa = self.loss_func(task_output, tf.cast(labelb, tf.float32))
+                #task_outputa = task_output = weights_output(tf.cast(inputb, tf.float32))
+                #task_lossa = self.loss_func(task_output, tf.cast(labelb, tf.float32))
+                task_outputa = weights_output(tf.cast(inputa, tf.float32))
+                task_lossa = self.loss_func(task_outputa, tf.cast(labela, tf.float32))
                 #task_lossa_test = neg_L(weights_output,inputb,labelb)   #!!!
 
                 # task_lossa_op
@@ -511,9 +514,9 @@ class MAML:
 
 
                     deter(weights_output,weights_a)
-                    task_output = weights_output(tf.cast(inputb, tf.float32))
-                    task_outputbs.append(task_output)  #
-                    task_lossesb.append(self.loss_func(task_output, tf.cast(labelb, tf.float32)))
+                    task_outputb = weights_output(tf.cast(inputb, tf.float32))
+                    task_outputbs.append(task_outputb)  #
+                    task_lossesb.append(self.loss_func(task_outputb, tf.cast(labelb, tf.float32)))
 
                     # posterior b
 
@@ -522,7 +525,10 @@ class MAML:
 
                     if FLAGS.setseed:
                         set_seed(weights_a,j)
-                    apply_grad(weights_b,fast_weights_b,inputb,labelb)
+                    if FLAGS.inputa_only:
+                        apply_grad(weights_b,fast_weights_b,inputa,labela)
+                    else:
+                        apply_grad(weights_b,fast_weights_b,inputb,labelb)
 
                     #apply_grad(weights_b,fast_weights_b,tf.concat([inputa,inputb],0),tf.concat([labela,labelb],0))
 
@@ -541,7 +547,9 @@ class MAML:
                     lossb_qb_kl =[]
                     lossb_ab_xe=[]
                     lossb_bq_l2 = []
+                    lossb_bq_l2_a = []
                     lossb_bq_dev_l2 = []
+                    lossb_bq_dev_l2_a = []
 
                     if FLAGS.redim:
                         if FLAGS.separate_prior:
@@ -556,16 +564,22 @@ class MAML:
                                 lossb_abq.append( - weights_a_stop.layers[i].kernel_posterior.cross_entropy(q) + weights_b_stop.layers[i].kernel_posterior.cross_entropy(q) )
                                 lossb_ab_kl.append( weights_b_stop.layers[i].kernel_posterior.kl_divergence(weights_a.layers[i].kernel_posterior))
                                 lossb_bq.append( weights_b_stop.layers[i].kernel_posterior.cross_entropy(q))  #  +
-                                lossb_bq_kl.append( weights_b_stop.layers[i].kernel_posterior.kl_divergence(q))
+                                #lossb_bq_kl.append( weights_b_stop.layers[i].kernel_posterior.kl_divergence(q))
+                                lossb_bq_kl.append( weights_b_stop.layers[i].kernel_posterior.kl_divergence(layer.kernel_posterior))
                                 lossb_qb_kl.append(q.kl_divergence(weights_b_stop.layers[i].kernel_posterior))
                                 lossb_ab_xe.append(  weights_b_stop.layers[i].kernel_posterior.cross_entropy(weights_a.layers[i].kernel_posterior))
                                 lossb_ab_xe.append(  weights_b_stop.layers[i].bias_posterior.cross_entropy(weights_a.layers[i].bias_posterior))
                                 lossb_bq_l2.append(tf.reduce_sum(tf.squared_difference(layer.kernel_posterior.mean(),weights_b_stop.layers[i].kernel_posterior.mean())) + tf.reduce_sum(tf.squared_difference(layer.bias_posterior.mean(),weights_b_stop.layers[i].bias_posterior.mean())))
+                                lossb_bq_l2_a.append(tf.reduce_sum(tf.squared_difference(layer.kernel_posterior.mean(),weights_a_stop.layers[i].kernel_posterior.mean())) + tf.reduce_sum(tf.squared_difference(layer.bias_posterior.mean(),weights_a_stop.layers[i].bias_posterior.mean())))
 
                                 #lossb_bq_dev_l2.append(tf.reduce_sum(tf.squared_difference(layer.kernel_posterior.mean(),weights_b_stop.layers[i].kernel_posterior.mean()))/(FLAGS.update_lr) + tf.reduce_sum(tf.squared_difference(layer.bias_posterior.mean(),weights_b_stop.layers[i].bias_posterior.mean()))/(FLAGS.update_lr) + FLAGS.dev_weight * tf.reduce_sum(tf.squared_difference(  model_q.layers[i].trainable_weights[1]  ,  tf.stop_gradient(weights_b.layers[i].trainable_weights[1]) ))/(FLAGS.update_lr))
 
                                 lossb_bq_dev_l2.append(tf.reduce_sum(tf.squared_difference(layer.kernel_posterior.mean(),weights_b_stop.layers[i].kernel_posterior.mean()))/(FLAGS.update_lr) + tf.reduce_sum(tf.squared_difference(layer.bias_posterior.mean(),weights_b_stop.layers[i].bias_posterior.mean()))/(FLAGS.update_lr)
                                 + FLAGS.dev_weight * tf.reduce_sum(tf.squared_difference(  model_q.layers[i].trainable_weights[1]  ,  tfd.softplus_inverse(weights_b_stop.layers[i].kernel_posterior.stddev()) ))/(FLAGS.update_lr))
+
+                                lossb_bq_dev_l2_a.append(tf.reduce_sum(tf.squared_difference(layer.kernel_posterior.mean(),weights_a_stop.layers[i].kernel_posterior.mean()))/(FLAGS.update_lr) + tf.reduce_sum(tf.squared_difference(layer.bias_posterior.mean(),weights_a_stop.layers[i].bias_posterior.mean()))/(FLAGS.update_lr)
+                                + FLAGS.dev_weight * tf.reduce_sum(tf.squared_difference(  model_q.layers[i].trainable_weights[1]  ,  tfd.softplus_inverse(weights_a_stop.layers[i].kernel_posterior.stddev()) ))/(FLAGS.update_lr))
+
                                 #lossb_bq_dev_l2.append(tf.reduce_sum(tf.squared_difference(layer.kernel_posterior.mean(),weights_b_stop.layers[i].kernel_posterior.mean()))/FLAGS.update_lr + tf.reduce_sum(tf.squared_difference(layer.bias_posterior.mean(),weights_b_stop.layers[i].bias_posterior.mean()))/FLAGS.update_lr
                                 #+ FLAGS.dev_weight * tf.reduce_sum(tf.squared_difference(  tfd.softplus_inverse(layer.kernel_posterior.stddev())  ,  tfd.softplus_inverse(weights_b_stop.layers[i].kernel_posterior.stddev()) ))/FLAGS.update_lr)
 
@@ -588,8 +602,12 @@ class MAML:
                         meta_loss = tf.reduce_sum(lossb_qb_kl)
                     if FLAGS.meta_loss == 'bq_l2':
                         meta_loss = tf.reduce_sum(lossb_bq_l2)
+                    if FLAGS.meta_loss == 'bq_l2_a':
+                        meta_loss = tf.reduce_sum(lossb_bq_l2_a)
                     if FLAGS.meta_loss == 'bq_dev_l2':
                         meta_loss = tf.reduce_sum(lossb_bq_dev_l2)
+                    if FLAGS.meta_loss == 'bq_dev_l2_a':
+                        meta_loss = tf.reduce_sum(lossb_bq_dev_l2_a)
 
                     if FLAGS.meta_loss == 'b*a':
                         meta_loss = neg_log_likelihood_cross
@@ -639,6 +657,9 @@ class MAML:
                 task_output = [task_outputa, task_outputbs, task_lossa, task_lossesb, task_lossa_op, task_lossesb_op ,prior_lossesb_op]
 
                 if self.classification:
+                    print('task_outputa=',task_outputa)
+                    print("inputa=",inputa)
+                    print("labela=",labela)
                     task_accuracya = tf.contrib.metrics.accuracy(tf.argmax(tf.nn.softmax(task_outputa), 1), tf.argmax(labela, 1))
                     for j in range(num_updates):
                         task_accuraciesb.append(tf.contrib.metrics.accuracy(tf.argmax(tf.nn.softmax(task_outputbs[j]), 1), tf.argmax(labelb, 1)))
@@ -722,7 +743,7 @@ class MAML:
                 optimizer = tf.train.AdamOptimizer(self.prior_lr)
                 self.prior_gvs = prior_gvs = optimizer.compute_gradients(self.total_prior_op[num_updates-1])
                 if FLAGS.datasource == 'miniimagenet':
-                    prior_gvs = [(tf.clip_by_value(grad, -10, 10), var) for grad, var in prior_gvs]
+                    prior_gvs = [(tf.clip_by_value(grad, -10, 10), var) if grad is not None else (grad,var) for grad, var in prior_gvs]
                 self.priortrain_op = optimizer.apply_gradients(prior_gvs)
         else:
             self.metaval_total_loss1 = total_loss1 = tf.reduce_sum(lossesa) / tf.to_float(FLAGS.meta_batch_size)

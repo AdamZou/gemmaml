@@ -27,8 +27,13 @@ class DataGenerator(object):
         if FLAGS.datasource == 'sinusoid':
             self.generate = self.generate_sinusoid_batch
             self.amp_range = config.get('amp_range', [0.1, 5.0])
-            self.phase_range = config.get('phase_range', [0, np.pi])
+            #self.phase_range = config.get('phase_range', [0, np.pi])
             self.input_range = config.get('input_range', [-5.0, 5.0])
+            if FLAGS.hard_sin:
+                self.phase_range = config.get('phase_range', [0, 2*np.pi])
+            else:
+                self.phase_range = config.get('phase_range', [0, np.pi])
+            self.freq_range = config.get('freq_range', [0.5, 2.0])
             self.dim_input = 1
             self.dim_output = 1
         elif 'omniglot' in FLAGS.datasource:
@@ -93,7 +98,7 @@ class DataGenerator(object):
                 num_total_batches = 1
             else:
                 num_total_batches = 600
-            
+
 
         # make list of files
         print('Generating filenames')
@@ -175,11 +180,16 @@ class DataGenerator(object):
         # input_idx is used during qualitative testing --the number of examples used for the grad update
         amp = np.random.uniform(self.amp_range[0], self.amp_range[1], [self.batch_size])
         phase = np.random.uniform(self.phase_range[0], self.phase_range[1], [self.batch_size])
+        freq = np.random.uniform(self.freq_range[0], self.freq_range[1], [self.batch_size])
         outputs = np.zeros([self.batch_size, self.num_samples_per_class, self.dim_output])
         init_inputs = np.zeros([self.batch_size, self.num_samples_per_class, self.dim_input])
         for func in range(self.batch_size):
             init_inputs[func] = np.random.uniform(self.input_range[0], self.input_range[1], [self.num_samples_per_class, 1])
             if input_idx is not None:
                 init_inputs[:,input_idx:,0] = np.linspace(self.input_range[0], self.input_range[1], num=self.num_samples_per_class-input_idx, retstep=False)
-            outputs[func] = amp[func] * np.sin(init_inputs[func]-phase[func])
+            if not FLAGS.hard_sin:
+                outputs[func] = amp[func] * np.sin(init_inputs[func]-phase[func])
+            else:
+                noise = np.random.normal(loc = 0.0, scale=FLAGS.noise_factor * amp[func], size=[self.num_samples_per_class, 1])
+                outputs[func] = amp[func] * np.sin(init_inputs[func]*freq[func] - phase[func]) + noise
         return init_inputs, outputs, amp, phase
