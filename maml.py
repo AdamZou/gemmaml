@@ -64,7 +64,7 @@ FLAGS = flags.FLAGS
 
 
 class MAML:
-    def __init__(self, dim_input=1, dim_output=1, test_num_updates=1):
+    def __init__(self, dim_input=1, dim_output=1, test_num_updates=5):
         """ must call construct_model() after initializing MAML! """
         self.dim_input = dim_input
         self.dim_output = dim_output
@@ -362,9 +362,11 @@ class MAML:
                         continue
 
             def neg_L(model, input, label):
-                task_output = model(tf.cast(input, tf.float32))
-                neg_log_likelihood = self.loss_func(task_output, tf.cast(label, tf.float32))
-                return neg_log_likelihood
+                neg_log_likelihood = []
+                for i in range(FLAGS.num_ll_samples):
+                    task_output = model(tf.cast(input, tf.float32))
+                    neg_log_likelihood.append(self.loss_func(task_output, tf.cast(label, tf.float32)))
+                return tf.reduce_mean(neg_log_likelihood)
 
             def ELBO(model, input, label):
                 neg_log_likelihood = neg_L(model, input , label)
@@ -747,6 +749,7 @@ class MAML:
                 self.priortrain_op = optimizer.apply_gradients(prior_gvs)
         else:
             self.metaval_total_loss1 = total_loss1 = tf.reduce_sum(lossesa) / tf.to_float(FLAGS.meta_batch_size)
+            print('lossesb=',lossesb)
             self.metaval_total_losses2 = total_losses2 = [tf.reduce_sum(lossesb[j]) / tf.to_float(FLAGS.meta_batch_size) for j in range(num_updates)]
             #self.metaval_total_losses2 = total_losses2 = lossesb[0]
             if self.classification:

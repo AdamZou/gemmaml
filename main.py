@@ -48,8 +48,8 @@ flags.DEFINE_string('datasource', 'sinusoid', 'sinusoid or omniglot or miniimage
 flags.DEFINE_integer('num_classes', 5, 'number of classes used in classification (e.g. 5-way classification).')
 flags.DEFINE_bool('hard_sin', False, 'if true, generate harder sinusoid data')
 flags.DEFINE_float('noise_factor', 0.01, 'noise_factor')
-flags.DEFINE_integer('train_total_num_tasks', 100, 'total number of tasks for training with finite dataset')
-flags.DEFINE_integer('test_total_num_tasks', 100, 'total number of tasks for evaluation')
+flags.DEFINE_integer('train_total_num_tasks', -1, 'total number of tasks for training with finite dataset')
+flags.DEFINE_integer('test_total_num_tasks', -1, 'total number of tasks for evaluation')
 # oracle means task id is input (only suitable for sinusoid)
 flags.DEFINE_string('baseline', None, 'oracle, or None')
 
@@ -57,6 +57,7 @@ flags.DEFINE_string('baseline', None, 'oracle, or None')
 flags.DEFINE_float('sigma', 0.1, 'scale of label distribution')
 flags.DEFINE_integer('num_repeat', 1, 'number of repeated runnings for each prediction')
 flags.DEFINE_integer('pretrain_iterations', 0, 'number of pre-training iterations.')
+flags.DEFINE_integer('switchtrain_iterations', -1, 'number of switch-training iterations.')
 flags.DEFINE_integer('metatrain_iterations', 15000, 'number of metatraining iterations.') # 15k for omniglot, 50k for sinusoid
 flags.DEFINE_integer('meta_batch_size', 10, 'number of tasks sampled per meta-update')
 flags.DEFINE_float('meta_lr', 0.001, 'the base learning rate of the generator')
@@ -68,6 +69,7 @@ flags.DEFINE_string('meta_loss', 'b*a', 'type of the meta loss function.')
 flags.DEFINE_bool('one_sample', False, 'use the same sample for all training iterations or not')
 flags.DEFINE_bool('setseed', False, 'use the same seed in one loop')
 flags.DEFINE_float('dev_weight', 1.0, 'weight of dev different in meta loss func')
+flags.DEFINE_integer('num_ll_samples', 1, 'number of samples in calculating neg_log_likelihood.')
 
 ## Model options
 flags.DEFINE_string('norm', 'batch_norm', 'batch_norm, layer_norm, or None')
@@ -91,7 +93,8 @@ flags.DEFINE_bool('inputa_only',False, 'if True, use inputa and labela to train 
 flags.DEFINE_bool('log', True, 'if false, do not log summaries, for debugging code.')
 flags.DEFINE_string('logdir', '/tmp/data', 'directory for summaries and checkpoints.')
 flags.DEFINE_bool('resume', False, 'resume training if there is a model available')
-flags.DEFINE_bool('train', True, 'True to train, False to test.')
+flags.DEFINE_bool('train', True, 'True to train.')
+flags.DEFINE_bool('test', True, 'True to test.')
 flags.DEFINE_integer('test_iter', -1, 'iteration to load model (-1 for latest model)')
 flags.DEFINE_bool('test_set', False, 'Set to true to test on the the test set, False for the validation set.')
 flags.DEFINE_integer('train_update_batch_size', -1, 'number of examples used for gradient update during training (use if you want to test with a different number).')
@@ -108,10 +111,13 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
     SUMMARY_INTERVAL = 100
     SAVE_INTERVAL = 1000
     if FLAGS.datasource == 'sinusoid':
-        PRINT_INTERVAL = 100   #!!!!!!! 1000
+        PRINT_INTERVAL = 1000   #!!!!!!! 1000
         TEST_PRINT_INTERVAL = PRINT_INTERVAL*5
     else:
-        PRINT_INTERVAL = 10   #!!!! 100
+        if FLAGS.datasource == 'miniimagenet':
+            PRINT_INTERVAL = 1
+        else:
+            PRINT_INTERVAL = 100   #!!!! 100
         TEST_PRINT_INTERVAL = PRINT_INTERVAL*5
 
     if FLAGS.log:
@@ -132,14 +138,14 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
         feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb}
     #
     average_itr = 0 #    task-average algorithm
-
+    #np.random.seed(1)
     for itr in range(resume_itr, FLAGS.pretrain_iterations + FLAGS.metatrain_iterations):
 
         if not FLAGS.one_sample:
             feed_dict = {}
 
             if 'generate' in dir(data_generator):
-                if itr % FLAGS.train_total_num_tasks == 0:
+                if (FLAGS.train_total_num_tasks > 0) and (itr % FLAGS.train_total_num_tasks) == 0:
                     np.random.seed(1)
 
                 batch_x, batch_y, amp, phase = data_generator.generate()
@@ -159,10 +165,21 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
                 #print('inputb.shape=',inputb.shape,inputb)
                 feed_dict = {model.inputa: inputa, model.inputb: inputb,  model.labela: labela, model.labelb: labelb}
 
+        # bmaml  -> abq
+        if itr == FLAGS.switchtrain_iterations:
+            ws = sess.run(model.weights.trainable_weights,feed_dict)
+            print('weights=',ws)
+            for i in range(len(ws)):
+                sess.run( tf.assign(model.prior_weights.trainable_weights[i],ws[i]) )
+            print('prior_weights=',sess.run(model.prior_weights.trainable_weights,feed_dict))
+            FLAGS.separate_prior = True
+            FLAGS.meta_loss = 'abq'
+
         if itr < FLAGS.pretrain_iterations:
 	        input_tensors = [model.pretrain_op]
         else:
 ##### metatrain_op
+
             if FLAGS.weightsb:
                 wb = sess.run(model.fast_weights_b,feed_dict)
                 if (itr!=0) and itr % PRINT_INTERVAL == 0:
@@ -309,13 +326,13 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
     saver.save(sess, FLAGS.logdir + '/' + exp_string +  '/model' + str(itr))
 
 # calculated for omniglot
-NUM_TEST_POINTS = 600
+NUM_TEST_POINTS = 1200
 
 def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
     num_classes = data_generator.num_classes # for classification, 1 otherwise
 
-    np.random.seed(1)
-    random.seed(1)
+    #np.random.seed(1)
+    #random.seed(1)
 
     metaval_accuracies = []
 
@@ -443,8 +460,8 @@ def main():
             else:
                 test_num_updates = 10
         else:
-            #test_num_updates = 10
-            test_num_updates = 1  #!!!!
+            test_num_updates = 10
+            #test_num_updates = 1  #!!!!
 
     #FLAGS.meta_batch_size = 1     #### debug !!!!!!!!!!!
     if FLAGS.train == False:
@@ -508,7 +525,7 @@ def main():
         num_classes = data_generator.num_classes
         np.random.seed(1)
         random.seed(1)
-        if FLAGS.train or FLAGS.datasource == 'sinusoid':
+        if FLAGS.train or FLAGS.datasource == 'sinusoid':  #inputs and labels here will not be used for sinusoid case, only inputa_init is used to initialize the models
             #random.seed(5)
             if 'generate' in dir(data_generator):
                 batch_x, batch_y, amp, phase = data_generator.generate()
@@ -637,8 +654,8 @@ def main():
             #    print('Var {}: {}'.format(i, var))
             print('start training')
             train(model, saver, sess, exp_string, data_generator, resume_itr)
+        #if FLAGS.test:
         else:
-
             #print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
             test(model, saver, sess, exp_string, data_generator, test_num_updates)
             #for i, var in enumerate(saver._var_list):
