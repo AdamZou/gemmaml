@@ -106,11 +106,15 @@ flags.DEFINE_string('model_file', None, 'model file for continual training')
 flags.DEFINE_bool('construct_only',False, 'if True, only construct models and skip training or testing')
 flags.DEFINE_bool('print_grads_details',False, 'if True, print details like gradients, model parameters')
 flags.DEFINE_bool('test_all',False, 'if True, test on saved models of all training iterations')
-
+flags.DEFINE_bool('mem',False, 'if True, print memory usage in every iteration')
 
 from subprocess import check_output
 def nvidia_smi(options=['-q','-d','MEMORY']):
     return check_output(['nvidia-smi'] + options)
+
+mean_list = []
+std_list = []
+ci_list = []
 
 def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
     SUMMARY_INTERVAL = 100
@@ -145,8 +149,8 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
     average_itr = 0 #    task-average algorithm
     #np.random.seed(1)
     for itr in range(resume_itr, FLAGS.pretrain_iterations + FLAGS.metatrain_iterations):
-
-        print(nvidia_smi())
+        if FLAGS.mem:
+            print(nvidia_smi())
         if not FLAGS.one_sample:
             feed_dict = {}
 
@@ -228,7 +232,11 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
         if itr % SUMMARY_INTERVAL == 0:
             prelosses.append(result[-2])
             if FLAGS.log:
-                train_writer.add_summary(result[-3], itr)
+                if model.classification:
+                    train_writer.add_summary(result[-5], itr)
+                else:
+                    train_writer.add_summary(result[-3], itr)
+
                 '''
                 if FLAGS.separate_prior:
                     train_writer.add_summary(result[2], itr)
@@ -338,10 +346,10 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
 def test(model, saver, sess, exp_string, data_generator, test_num_updates=None,NUM_TEST_POINTS = 1000):
     num_classes = data_generator.num_classes # for classification, 1 otherwise
 
-    #np.random.seed(1)
+    np.random.seed(10)
     #random.seed(1)
-
     metaval_accuracies = []
+
 
     for _ in range(NUM_TEST_POINTS):
         if 'generate' not in dir(data_generator):
@@ -442,8 +450,11 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None,N
     out_pkl = os.path.join(FLAGS.logdir ,  exp_string + '/' + 'test_ubs' + str(FLAGS.update_batch_size) + '_stepsize' + str(FLAGS.update_lr) + '.pkl')
     #print('out_filename=',out_filename)
     #print('out_pkl=',out_pkl)
+    mean_list.append(means)
+    std_list.append(stds)
+    ci_list.append(ci95)
     result_pkl = os.path.join(FLAGS.logdir ,  exp_string + '/' + 'results'+ '.pkl')
-    pickle.dump([means],
+    pickle.dump([mean_list,std_list,ci_list],
              open(result_pkl, 'wb'))
 
     with open(out_pkl, 'wb') as f:
