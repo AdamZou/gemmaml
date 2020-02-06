@@ -105,7 +105,12 @@ flags.DEFINE_string('alias', '', 'it is used to distinguish different models in 
 flags.DEFINE_string('model_file', None, 'model file for continual training')
 flags.DEFINE_bool('construct_only',False, 'if True, only construct models and skip training or testing')
 flags.DEFINE_bool('print_grads_details',False, 'if True, print details like gradients, model parameters')
+flags.DEFINE_bool('test_all',False, 'if True, test on saved models of all training iterations')
 
+
+from subprocess import check_output
+def nvidia_smi(options=['-q','-d','MEMORY']):
+    return check_output(['nvidia-smi'] + options)
 
 def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
     SUMMARY_INTERVAL = 100
@@ -141,6 +146,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
     #np.random.seed(1)
     for itr in range(resume_itr, FLAGS.pretrain_iterations + FLAGS.metatrain_iterations):
 
+        print(nvidia_smi())
         if not FLAGS.one_sample:
             feed_dict = {}
 
@@ -277,7 +283,8 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
 
             prelosses, postlosses = [], []
 
-        if (itr!=0) and itr % SAVE_INTERVAL == 0:
+        #if (itr!=0) and itr % SAVE_INTERVAL == 0:
+        if itr % SAVE_INTERVAL == 0:
             saver.save(sess, FLAGS.logdir + '/' + exp_string + '/model' + str(itr))
 
         # sinusoid is infinite data, so no need to test on meta-validation set.
@@ -326,9 +333,9 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
     saver.save(sess, FLAGS.logdir + '/' + exp_string +  '/model' + str(itr))
 
 # calculated for omniglot
-NUM_TEST_POINTS = 1200
+#NUM_TEST_POINTS = 100
 
-def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
+def test(model, saver, sess, exp_string, data_generator, test_num_updates=None,NUM_TEST_POINTS = 1000):
     num_classes = data_generator.num_classes # for classification, 1 otherwise
 
     #np.random.seed(1)
@@ -416,8 +423,8 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
             #result = sess.run(model.total_loss1,feed_dict)
             #print(sess.run(model.outputas))
             #print(sess.run(model.weights_output.layers[0].kernel_posterior.mean()))
-        print('TEST:',_)
-        print('result=',result[0],result[-1])
+        #print('TEST:',_)
+        #print('result=',result[0],result[-1])
 
         metaval_accuracies.append(result)
 
@@ -435,6 +442,9 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
     out_pkl = os.path.join(FLAGS.logdir ,  exp_string + '/' + 'test_ubs' + str(FLAGS.update_batch_size) + '_stepsize' + str(FLAGS.update_lr) + '.pkl')
     #print('out_filename=',out_filename)
     #print('out_pkl=',out_pkl)
+    result_pkl = os.path.join(FLAGS.logdir ,  exp_string + '/' + 'results'+ '.pkl')
+    pickle.dump([means],
+             open(result_pkl, 'wb'))
 
     with open(out_pkl, 'wb') as f:
         pickle.dump({'mses': metaval_accuracies}, f)
@@ -446,6 +456,7 @@ def test(model, saver, sess, exp_string, data_generator, test_num_updates=None):
         writer.writerow(ci95)
 
 def main():
+    print(nvidia_smi())
     #config.gpu_options.allow_growth = True
     if FLAGS.datasource == 'sinusoid':
         if FLAGS.train:
@@ -624,42 +635,75 @@ def main():
     tf.global_variables_initializer().run()
     tf.train.start_queue_runners()
 
-    if FLAGS.resume or not FLAGS.train:
-        #print(FLAGS.logdir + '/' + exp_string)
-
+    if FLAGS.test_all:
         if FLAGS.model_file:
             model_file_path = os.path.join(FLAGS.logdir,FLAGS.model_file)
         else:
             model_file_path = os.path.join(FLAGS.logdir,exp_string)
 
-        model_file = tf.train.latest_checkpoint(model_file_path)
+        #model_file = tf.train.latest_checkpoint(model_file_path)
         print(model_file_path)
 
-        '''
-        if FLAGS.test_iter > 0:   # usually not used
-            model_file = model_file[:model_file.index('model')] + 'model' + str(FLAGS.test_iter)
-        '''
-        if model_file:
-            ind1 = model_file.index('model')
-            resume_itr = int(model_file[ind1+5:])
-            print("Restoring model weights from " + model_file)
-            saver.restore(sess, model_file)
-        else:
-            print(model_file_path + '   not found')
 
-    if not FLAGS.construct_only:
-        if FLAGS.train:
-            #print tf.get_default_graph().as_graph_def()
-            #for i, var in enumerate(saver._var_list):
-            #    print('Var {}: {}'.format(i, var))
-            print('start training')
-            train(model, saver, sess, exp_string, data_generator, resume_itr)
-        #if FLAGS.test:
-        else:
-            #print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
-            test(model, saver, sess, exp_string, data_generator, test_num_updates)
-            #for i, var in enumerate(saver._var_list):
-            #    print('Var {}: {}'.format(i, var))
+        for test_iter in range(1000,FLAGS.metatrain_iterations,1000):
+            model_file = tf.train.latest_checkpoint(model_file_path)
+            model_file = model_file[:model_file.index('model')] + 'model' + str(test_iter)
+            #print(model_file_path)
+            print(test_iter)
+            if model_file:
+                ind1 = model_file.index('model')
+                resume_itr = int(model_file[ind1+5:])
+                #print("Restoring model weights from " + model_file)
+
+                try:
+                    saver.restore(sess, model_file)
+                    test(model, saver, sess, exp_string, data_generator, test_num_updates,NUM_TEST_POINTS = 100)
+
+                except AttributeError:
+                    print('error')
+
+            else:
+                print(model_file_path + '   not found')
+
+
+
+    else:
+        if FLAGS.resume or not FLAGS.train:
+            #print(FLAGS.logdir + '/' + exp_string)
+
+            if FLAGS.model_file:
+                model_file_path = os.path.join(FLAGS.logdir,FLAGS.model_file)
+            else:
+                model_file_path = os.path.join(FLAGS.logdir,exp_string)
+
+            model_file = tf.train.latest_checkpoint(model_file_path)
+            print(model_file_path)
+
+            '''
+            if FLAGS.test_iter > 0:   # usually not used
+                model_file = model_file[:model_file.index('model')] + 'model' + str(FLAGS.test_iter)
+            '''
+            if model_file:
+                ind1 = model_file.index('model')
+                resume_itr = int(model_file[ind1+5:])
+                print("Restoring model weights from " + model_file)
+                saver.restore(sess, model_file)
+            else:
+                print(model_file_path + '   not found')
+
+        if not FLAGS.construct_only:
+            if FLAGS.train:
+                #print tf.get_default_graph().as_graph_def()
+                #for i, var in enumerate(saver._var_list):
+                #    print('Var {}: {}'.format(i, var))
+                print('start training')
+                train(model, saver, sess, exp_string, data_generator, resume_itr)
+            #if FLAGS.test:
+            else:
+                #print(sess.run(model.weights.layers[0].kernel_posterior.mean()))
+                test(model, saver, sess, exp_string, data_generator, test_num_updates)
+                #for i, var in enumerate(saver._var_list):
+                #    print('Var {}: {}'.format(i, var))
 
 if __name__ == "__main__":
     main()
