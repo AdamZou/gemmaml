@@ -293,6 +293,7 @@ def train(model, saver, sess, exp_string, data_generator, resume_itr=0):
 
         #if (itr!=0) and itr % SAVE_INTERVAL == 0:
         if itr % SAVE_INTERVAL == 0:
+            print(itr,'saved')
             saver.save(sess, FLAGS.logdir + '/' + exp_string + '/model' + str(itr))
 
         # sinusoid is infinite data, so no need to test on meta-validation set.
