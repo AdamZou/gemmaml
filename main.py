@@ -601,8 +601,8 @@ def main():
     model.summ_op = tf.summary.merge_all()
 
 
-    saver = loader = tf.train.Saver(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES), max_to_keep=5)
-
+    saver = loader = tf.train.Saver(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES), max_to_keep=1005)
+    #saver = loader = tf.train.Saver(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES))
     #saver = loader = tf.train.Saver({'weights':model.weights.trainable_variables}, max_to_keep=2)
 
 
