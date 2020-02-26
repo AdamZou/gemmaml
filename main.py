@@ -483,8 +483,8 @@ def main():
             else:
                 test_num_updates = 10
         else:
-            test_num_updates = 10
-            #test_num_updates = 1  #!!!!
+            #test_num_updates = 10
+            test_num_updates = 1  #!!!!
 
     #FLAGS.meta_batch_size = 1     #### debug !!!!!!!!!!!
     if FLAGS.train == False:
