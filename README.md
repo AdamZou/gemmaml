@@ -2,7 +2,7 @@
 
 This repo contains code accompaning the paper, 	[Gradient EM Algorithm for Bayesian Meta-learning,submitted to NIPS 2020)](). It includes code for running the few-shot supervised learning domain experiments, including sinusoid regression, Omniglot classification, and MiniImagenet classification.
 
-For the experiments in the RL domain, see [this codebase](https://github.com/cbfinn/maml_rl).
+#For the experiments in the RL domain, see [this codebase](https://github.com/cbfinn/maml_rl).
 
 ### Dependencies
 This code requires the following:
